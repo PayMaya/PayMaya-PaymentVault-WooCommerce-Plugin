@@ -1,1 +1,1 @@
-# PayMaya-PaymentVault-WooCommerce-Plugin
+PayMaya PaymentVault WooCommerce plugin
