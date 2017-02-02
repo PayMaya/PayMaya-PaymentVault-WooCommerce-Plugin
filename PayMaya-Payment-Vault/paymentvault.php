@@ -34,7 +34,7 @@
 		}
 		
 		function  __set( $name, $value ) {
-			$this->$name = str_replace(chr(32), '', trim($value));
+			$this->$name = str_replace(' ', '', trim($value));
 		}
 	}
 	
@@ -188,7 +188,7 @@
 		private function generateReqCreateToken(){
 			return array(
 				'card' => array(
-					'number' => (isset($this->CardDetails->cardNumber)? $this->CardDetails->cardNumber : ""),
+					'number' => (isset($this->CardDetails->cardNumber)? str_replace(' ', '', trim($this->CardDetails->cardNumber)) : ""),
 					'expMonth' => (isset($this->CardDetails->cardExpiryMonth)? $this->CardDetails->cardExpiryMonth : ""),
 					'expYear' => (isset($this->CardDetails->cardExpiryYear)? $this->CardDetails->cardExpiryYear : ""),
 					'cvc' => (isset($this->CardDetails->cardCVC)? $this->CardDetails->cardCVC : ""),
@@ -201,23 +201,23 @@
 				'paymentTokenId' => $this->tokenId,
 				'totalAmount' => array(
 					"amount" => (isset($this->totalAmount)? $this->totalAmount : 0),
-                    "currency" => (isset($this->currency)? $this->currency : "")
+                    "currency" => (isset($this->currency)? $this->currency : " ")
 				),
 				'buyer' => array(
-					"firstName" => (isset($this->CustomerDetails->firstName)? $this->CustomerDetails->firstName : ""),
-				    "middleName" => (isset($this->CustomerDetails->middleName)? $this->CustomerDetails->middleName : ""),
-				    "lastName" => (isset($this->CustomerDetails->lastName)? $this->CustomerDetails->lastName : ""),
+					"firstName" => (isset($this->CustomerDetails->firstName)? $this->CustomerDetails->firstName : " "),
+				    "middleName" => (isset($this->CustomerDetails->middleName)? $this->CustomerDetails->middleName : " "),
+				    "lastName" => (isset($this->CustomerDetails->lastName)? $this->CustomerDetails->lastName : " "),
 				    "contact" => array(
-					    "phone" => (isset($this->CustomerDetails->phone)? $this->CustomerDetails->phone : ""),
-				        "email" => (isset($this->CustomerDetails->email)? $this->CustomerDetails->email : "")
+					    "phone" => (isset($this->CustomerDetails->phone)? $this->CustomerDetails->phone : " "),
+				        "email" => (isset($this->CustomerDetails->email)? $this->CustomerDetails->email : " ")
 				    ),
 				    "billingAddress" => array(
-					    "line1" => (isset($this->CustomerDetails->line1)? $this->CustomerDetails->line1 : ""),
-				        "line2" => (isset($this->CustomerDetails->line2)? $this->CustomerDetails->line2 : ""),
-				        "city" => (isset($this->CustomerDetails->city)? $this->CustomerDetails->city : ""),
-				        "state" => (isset($this->CustomerDetails->state)? $this->CustomerDetails->state : ""),
-				        "zipCode" => (isset($this->CustomerDetails->zipCode)? $this->CustomerDetails->zipCode : ""),
-				        "countryCode" => (isset($this->CustomerDetails->countryCode)? $this->CustomerDetails->countryCode : "")
+					    "line1" => (isset($this->CustomerDetails->line1)? $this->CustomerDetails->line1 : " "),
+				        "line2" => (isset($this->CustomerDetails->line2)? $this->CustomerDetails->line2 : " "),
+				        "city" => (isset($this->CustomerDetails->city)? $this->CustomerDetails->city : " "),
+				        "state" => (isset($this->CustomerDetails->state)? $this->CustomerDetails->state : " "),
+				        "zipCode" => (isset($this->CustomerDetails->zipCode)? $this->CustomerDetails->zipCode : " "),
+				        "countryCode" => (isset($this->CustomerDetails->countryCode)? $this->CustomerDetails->countryCode : " ")
 				    )
 				)
 			);

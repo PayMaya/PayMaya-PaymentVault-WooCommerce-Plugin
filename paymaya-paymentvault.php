@@ -160,42 +160,44 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 		
 		$order = new WC_Order( $order_id );
 			
-		$a = new WC_Payment_Gateway_CC();
-		$c = $a->get_post_data();
+		$wcpg = new WC_Payment_Gateway_CC();
+	  $wcpgData = $wcpg->get_post_data();
 		
-		$d = new \PayMayaPaymentVault\CardDetails();
-		$d->cardNumber = $c['paymaya_paymentvault-card-number'];
-		
-		$r = new \PayMayaPaymentVault\PaymentVault($this->public_facing_api_key, $this->secret_api_key, $this->environment);
-		$r->totalAmount = $a->get_order_total();
-		$r->currency = 'PHP';
-		$r->CardDetails->cardNumber = '5123456789012346';
-	  $r->CardDetails->cardExpiryMonth = '05';
-	  $r->CardDetails->cardExpiryYear = '2017';
-	  $r->CardDetails->cardCVC = '111';
-	  $r->CustomerDetails->firstName = 'Dennis';
-	  $r->CustomerDetails->middleName = 'Darang';
-	  $r->CustomerDetails->lastName = 'Colinares';
-	  $r->CustomerDetails->phone = '+63(2)1234567890';
-	  $r->CustomerDetails->email = 'me@yahoo.com';
-	  $r->CustomerDetails->line1 = 'Boni';
-	  $r->CustomerDetails->line2 = 'Boni';
-	  $r->CustomerDetails->city = 'Mandaluyong City';
-	  $r->CustomerDetails->state = 'Metro Manila';
-	  $r->CustomerDetails->zipCode = '12345';
-	  $r->CustomerDetails->countryCode = 'PH';
-			
-	  $t = $r->createPayment();
-			
-		//wc_add_notice( __('Payment error:', 'woothemes') . serialize($a->get_post_data()), 'error' );
-		wc_add_notice( __('Payment error:', 'woothemes') . serialize($t), 'error' );
+		$pv = new \PayMayaPaymentVault\PaymentVault($this->public_facing_api_key, $this->secret_api_key, $this->environment);
+		$pv->totalAmount = $wcpg->get_order_total();
+		$pv->currency = $order->order_currency;
+		$pv->CardDetails->cardNumber = $wcpgData[esc_attr( $this->id ) .'-card-number'];
 	  
-		return;
-		
-		/*return array(
-	  'result'   => 'success',
-	  'redirect' => $this->get_return_url($order),
-	);*/
+		$expiryDate = explode(chr(47), $wcpgData[esc_attr( $this->id ) .'-card-expiry']);
+		$pv->CardDetails->cardExpiryMonth = trim($expiryDate[0]);
+	  $pv->CardDetails->cardExpiryYear = trim($expiryDate[1]);
+	  $pv->CardDetails->cardCVC = $wcpgData[esc_attr( $this->id ) .'-card-cvc'];
+	  
+	  $pv->CustomerDetails->firstName = $wcpgData['billing_first_name'];
+	  $pv->CustomerDetails->middleName = " ";
+	  $pv->CustomerDetails->lastName = $wcpgData['billing_last_name'];
+	  $pv->CustomerDetails->phone = $wcpgData['billing_phone'];
+	  $pv->CustomerDetails->email = $wcpgData['billing_email'];
+	  $pv->CustomerDetails->line1 = $wcpgData['billing_address_1'];
+	  $pv->CustomerDetails->line2 = $wcpgData['billing_address_2'];
+	  $pv->CustomerDetails->city = $wcpgData['billing_city'];
+	  $pv->CustomerDetails->state = $wcpgData['billing_state'];
+	  $pv->CustomerDetails->zipCode = $wcpgData['billing_postcode'];
+	  $pv->CustomerDetails->countryCode = $wcpgData['billing_country'];
+			
+	  $retVal = $pv->createPayment();
+	  
+	  switch ($retVal->status){
+			  case 'PAYMENT_SUCCESS':
+		      $order->payment_complete();
+			    return array('result' => 'success', 'redirect' => $this->get_return_url($order));
+			  	break;
+			  case 'PENDING_PAYMENT':
+		      $order->update_status('on-hold', __('Awaiting cheque payment', 'woothemes'));
+			  	break;
+			  case 'PAYMENT_FAILED':
+		      wc_add_notice( __('Payment error:', 'woothemes') . 'PAYMENT FAILED', 'error' );
+			  	break;
+	  }
 	}
-
 }
