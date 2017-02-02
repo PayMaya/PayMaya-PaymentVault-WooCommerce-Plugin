@@ -78,7 +78,7 @@ class WC_CustomOrderDataPV
      */
     public function save() {
         global $wpdb;
-
+		
         // delete all options
         $wpdb->query('DELETE FROM wp_woocommerce_customorder_data WHERE order_id = ' . $this->order_id);
 

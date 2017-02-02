@@ -9,7 +9,7 @@ Author URI: https://developers.paymaya.com/
 */
 
 require_once __DIR__ . '/woocommerce-customorder-data/woocommerce-customorder-data.php';
-register_activation_hook( __FILE__,'woocommerce_custom_order_data_activate');
+register_activation_hook( __FILE__,'woocommerce_customorder_data_activate');
 
 // Include our Gateway Class and register Payment Gateway with WooCommerce
 add_action( 'plugins_loaded', 'paymaya_paymentvault_init', 0 );
@@ -48,8 +48,8 @@ function paymaya_paymentvault_action_links( $links ) {
 
 function paymaya_paymentvault_handler_webhook() {
     global $woocommerce;
-
-    $checkoutGateway = new PayMaya_Paymentvault();
+	
+    /*$checkoutGateway = new Paymaya_Paymentvault();
     $order = new WC_Order($_GET['amp;cid']);
 
     if(!empty($order->post)) {
@@ -78,6 +78,6 @@ function paymaya_paymentvault_handler_webhook() {
             wp_redirect($checkoutGateway->get_return_url($order));
             exit(0);
         }
-    }
+    }*/
 }
 add_action( 'woocommerce_api_paymaya_paymentvault_handler', 'paymaya_paymentvault_handler_webhook' );

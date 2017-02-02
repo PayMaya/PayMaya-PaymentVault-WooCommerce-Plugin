@@ -1,9 +1,8 @@
 <?php
 
-require_once __DIR__ . '/PayMaya-PHP-SDK-master/sample/autoload.php';
-require_once __DIR__ . '/PayMaya-PHP-SDK-master/sample/Checkout/User.php';
+require_once __DIR__ . '/PayMaya-Payment-Vault/paymentvault.php';
 
-class PayMaya_Paymentvault extends WC_Payment_Gateway {
+class Paymaya_Paymentvault extends WC_Payment_Gateway {
 
   function __construct() {
     $this->id = "paymaya_paymentvault";
@@ -25,7 +24,7 @@ class PayMaya_Paymentvault extends WC_Payment_Gateway {
     }
 
     add_action( 'admin_notices', array( $this, 'do_ssl_check' ) );
-    add_action( 'admin_notices', array( $this, 'register_webhook' ) );
+    //add_action( 'admin_notices', array( $this, 'register_webhook' ) );
 
     if(is_admin()) {
       add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
@@ -73,83 +72,6 @@ class PayMaya_Paymentvault extends WC_Payment_Gateway {
     );
   }
 
-  public function process_payment( $order_id ) {
-    global $woocommerce;
-
-    \PayMaya\PayMayaSDK::getInstance()->initCheckout($this->public_facing_api_key, $this->secret_api_key, "sandbox");
-
-    $item_checkout = new PayMaya\API\Checkout();
-    $wooCountries = new WC_Countries();
-    $user = new User();
-    $item_checkout->buyer = $user->buyerInfo();
-
-    $customer_order = new WC_Order( $order_id );
-
-    $states = $wooCountries->get_states($customer_order->billing_country);
-    $billingState = $states[$customer_order->billing_state];
-
-    $address = new PayMaya\Model\Checkout\Address();
-    $address->line1 = $customer_order->billing_address_1;
-    $address->line2 = $customer_order->billing_address_2;
-    $address->city = $customer_order->billing_city;
-    $address->state = $billingState;
-    $address->zipCode = $customer_order->billing_postcode;
-    $address->countryCode = "PH";
-
-    $item_checkout->buyer->shippingAddress = $address;
-    $item_checkout->buyer->billingAddress  = $address;
-
-    foreach($customer_order->get_items() as $key => $cart_item) {
-        $product = new WC_Product($cart_item['product_id']);
-
-        $product_price = new PayMaya\Model\Checkout\ItemAmount();
-        $product_price->currency = "PHP";
-        $product_price->value = number_format($product->get_price(), 2, ".", "");
-        $product_price->details = new PayMaya\Model\Checkout\ItemAmountDetails();
-
-        $line_total = new PayMaya\Model\Checkout\ItemAmount();
-        $line_total->currency = "PHP";
-        $line_total->value = number_format($cart_item['line_total'], 2, ".", "");
-        $line_total->details = new PayMaya\Model\Checkout\ItemAmountDetails();
-
-        $item = new PayMaya\Model\Checkout\Item();
-        $item->name = $product->get_title();
-        $item->code = $product->get_sku();
-        $item->description = "";
-        $item->quantity = $cart_item['qty'];
-        $item->totalAmount = $line_total;
-
-        $item_checkout->items[] = $item;
-    }
-
-    $totalAmount = new PayMaya\Model\Checkout\ItemAmount();
-    $totalAmount->currency = "PHP";
-    $totalAmount->value = number_format($customer_order->get_total(), 2, ".", "");
-    $totalAmount->details = new PayMaya\Model\Checkout\ItemAmountDetails();
-
-    $random_token = uniqid("paymaya-pg-", true);
-
-    $item_checkout->totalAmount = $totalAmount;
-    $item_checkout->requestReferenceNumber = "$order_id";
-    $item_checkout->redirectUrl = array(
-      "success" => get_home_url() . "?wc-api=paymaya_paymentvault_handler&cid=$order_id&n=$random_token",
-      "failure" => get_home_url() . "?wc-api=paymaya_paymentvault_handler&cid=$order_id&n=$random_token",
-      "cancel"  => get_home_url() . "?wc-api=paymaya_paymentvault_handler&cid=$order_id&n=$random_token"
-    );
-    $item_checkout->execute();
-
-    WC_CustomOrderDataPV::extend($customer_order);
-    $customer_order->custom->checkout_id = $item_checkout->id;
-    $customer_order->custom->checkout_url = $item_checkout->url;
-    $customer_order->custom->nonce = $random_token;
-    $customer_order->custom->save();
-
-    return array(
-      'result'   => 'success',
-      'redirect' => $item_checkout->url,
-    );
-  }
-
   // Validate fields
   public function validate_fields() {
     return true;
@@ -164,5 +86,116 @@ class PayMaya_Paymentvault extends WC_Payment_Gateway {
       }
     }
   }
+	public function payment_fields() {
+		if ( $this->supports( 'tokenization' ) && is_checkout() ) {
+			$this->tokenization_script();
+			$this->saved_payment_methods();
+			$this->form();
+			$this->save_payment_method_checkbox();
+		} else {
+			$this->form();
+		}
+	}
+	
+	/**
+	 * Output field name HTML
+	 *
+	 * Gateways which support tokenization do not require names - we don't want the data to post to the server.
+	 *
+	 * @since  2.6.0
+	 * @param  string $name
+	 * @return string
+	 */
+	public function field_name( $name ) {
+		return $this->supports( 'tokenization' ) ? '' : ' name="' . esc_attr( $this->id . '-' . $name ) . '" ';
+	}
+	
+	public function form() {
+		wp_enqueue_script( 'wc-credit-card-form' );
+		
+		$fields = array();
+			
+		$cvc_field = '<p class="form-row form-row-last">
+            <label for="' . esc_attr( $this->id ) . '-card-cvc">' . __( 'Card Code', 'woocommerce' ) . ' <span class="required">*</span></label>
+            <input id="' . esc_attr( $this->id ) . '-card-cvc" class="input-text wc-credit-card-form-card-cvc" inputmode="numeric" autocomplete="off" autocorrect="no" autocapitalize="no" spellcheck="no" type="tel" maxlength="4" placeholder="' . esc_attr__( 'CVC', 'woocommerce' ) . '" ' . $this->field_name( 'card-cvc' ) . ' style="width:100px" />
+        </p>';
+		
+		$default_fields = array(
+			'card-number-field' => '<p class="form-row form-row-wide">
+                <label for="' . esc_attr( $this->id ) . '-card-number">' . __( 'Card Number', 'woocommerce' ) . ' <span class="required">*</span></label>
+                <input id="' . esc_attr( $this->id ) . '-card-number" class="input-text wc-credit-card-form-card-number" inputmode="numeric" autocomplete="cc-number" autocorrect="no" autocapitalize="no" spellcheck="no" type="tel" placeholder="&bull;&bull;&bull;&bull; &bull;&bull;&bull;&bull; &bull;&bull;&bull;&bull; &bull;&bull;&bull;&bull;" ' . $this->field_name( 'card-number' ) . ' />
+            </p>',
+			'card-expiry-field' => '<p class="form-row form-row-first">
+                <label for="' . esc_attr( $this->id ) . '-card-expiry">' . __( 'Expiry (MM/YYYY)', 'woocommerce' ) . ' <span class="required">*</span></label>
+                <input id="' . esc_attr( $this->id ) . '-card-expiry" class="input-text wc-credit-card-form-card-expiry" inputmode="numeric" autocomplete="cc-exp" autocorrect="no" autocapitalize="no" spellcheck="no" type="tel" placeholder="' . esc_attr__( 'MM / YYYY', 'woocommerce' ) . '" ' . $this->field_name( 'card-expiry' ) . ' />
+            </p>',
+		);
+		
+		if ( ! $this->supports( 'credit_card_form_cvc_on_saved_method' ) ) {
+			$default_fields['card-cvc-field'] = $cvc_field;
+		}
+		
+		$fields = wp_parse_args( $fields, apply_filters( 'woocommerce_credit_card_form_fields', $default_fields, $this->id ) );
+		?>
+		
+		<fieldset id="wc-<?php echo esc_attr( $this->id ); ?>-cc-form" class='wc-credit-card-form wc-payment-form'>
+			<?php do_action( 'woocommerce_credit_card_form_start', $this->id ); ?>
+			<?php
+				foreach ( $fields as $field ) {
+					echo $field;
+				}
+			?>
+			<?php do_action( 'woocommerce_credit_card_form_end', $this->id ); ?>
+			<div class="clear"></div>
+		</fieldset>
+		<?php
+		
+		if ( $this->supports( 'credit_card_form_cvc_on_saved_method' ) ) {
+			echo '<fieldset>' . $cvc_field . '</fieldset>';
+		}
+	}
+	
+	public function process_payment( $order_id ) {
+		global $woocommerce;
+		
+		$order = new WC_Order( $order_id );
+			
+		$a = new WC_Payment_Gateway_CC();
+		$c = $a->get_post_data();
+		
+		$d = new \PayMayaPaymentVault\CardDetails();
+		$d->cardNumber = $c['paymaya_paymentvault-card-number'];
+		
+		$r = new \PayMayaPaymentVault\PaymentVault($this->public_facing_api_key, $this->secret_api_key, $this->environment);
+		$r->totalAmount = $a->get_order_total();
+		$r->currency = 'PHP';
+		$r->CardDetails->cardNumber = '5123456789012346';
+	  $r->CardDetails->cardExpiryMonth = '05';
+	  $r->CardDetails->cardExpiryYear = '2017';
+	  $r->CardDetails->cardCVC = '111';
+	  $r->CustomerDetails->firstName = 'Dennis';
+	  $r->CustomerDetails->middleName = 'Darang';
+	  $r->CustomerDetails->lastName = 'Colinares';
+	  $r->CustomerDetails->phone = '+63(2)1234567890';
+	  $r->CustomerDetails->email = 'me@yahoo.com';
+	  $r->CustomerDetails->line1 = 'Boni';
+	  $r->CustomerDetails->line2 = 'Boni';
+	  $r->CustomerDetails->city = 'Mandaluyong City';
+	  $r->CustomerDetails->state = 'Metro Manila';
+	  $r->CustomerDetails->zipCode = '12345';
+	  $r->CustomerDetails->countryCode = 'PH';
+			
+	  $t = $r->createPayment();
+			
+		//wc_add_notice( __('Payment error:', 'woothemes') . serialize($a->get_post_data()), 'error' );
+		wc_add_notice( __('Payment error:', 'woothemes') . serialize($t), 'error' );
+	  
+		return;
+		
+		/*return array(
+	  'result'   => 'success',
+	  'redirect' => $this->get_return_url($order),
+	);*/
+	}
 
 }
