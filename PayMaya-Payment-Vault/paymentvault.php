@@ -1,4 +1,5 @@
 <?php
+	
 	namespace PayMayaPaymentVault;
 	
 	use Curl\Curl;
@@ -35,6 +36,22 @@
 		
 		function  __set( $name, $value ) {
 			$this->$name = str_replace(' ', '', trim($value));
+		}
+	}
+	
+	class RedirectionURL{
+		public $success;
+		public $failure;
+		public $cancel;
+		
+		function __construct() {
+			
+		}
+		
+		function __destruct() {
+			$this->success = null;
+			$this->failure = null;
+			$this->cancel = null;
 		}
 	}
 	
@@ -91,19 +108,22 @@
 		private $pk_key;
 		private $sk_key;
 		private $url;
+		private $is3dsEnabled = false;
 		private $paymayaUrl = array(
 			"sandbox" => 'https://pg-sandbox.paymaya.com/payments',
 			"production" => ''
 		);
 		private $urlPath = array(
 			'createToken' => '/v1/payment-tokens',
-			'payments' => '/v1/payments'
+			'payments' => '/v1/payments',
+			'webhooks' => '/v1/webhooks'
 		);
 		
 		public $totalAmount;
 		public $currency;
 		public $CustomerDetails;
 		public $CardDetails;
+		public $RedirectionURL;
 		
 		function __construct($publicKey, $secretKey, $env) {
 			$this->pk_key = trim($publicKey);
@@ -112,11 +132,13 @@
 			
 			$this->CustomerDetails = new CustomersDetails();
 			$this->CardDetails = new CardDetails();
+			$this->RedirectionURL = new RedirectionURL();
 		}
 		
 		function __destruct() {
 			$this->CustomerDetails = null;
 			$this->CardDetails = null;
+			$this->RedirectionURL = null;
 		}
 		
 		function __get( $name ) {
@@ -128,11 +150,18 @@
 		}
 		
 		public function hasToken(){
-			return (strlen($this->tokenId) > 0? true : false);
+			return (strlen($this->tokenId) > 150? true : false);
 		}
 		
 		public function hasPaymentId(){
 			return (strlen($this->paymentId) > 0? true : false);
+		}
+		
+		public function is3DSEnabled(){
+			if($this->is3dsEnabled == true){
+				return true;
+			}
+			return false;
 		}
 		
 		public function getToken(){
@@ -150,7 +179,14 @@
 		}
 		
 		public function createPayment(){
-			$this->getToken();
+			$numargs = func_num_args();
+			
+			if($numargs > 0){
+				$this->tokenId = func_get_arg(0);
+			}
+			else{
+				$this->getToken();
+			}
 			
 			if ($this->hasToken() == false){
 				return false;
@@ -165,12 +201,20 @@
 			$ch->close();
 			
 			$this->paymentId = $retval->id;
+			$this->is3dsEnabled = (isset($retval->verificationUrl) == true? true : false);
 			
 			return $retval;
 		}
 		
 		public function getPayment(){
-			if($this->hasPaymentId() == false){
+			$numargs = func_num_args();
+			$paymentId = '';
+			
+			if($numargs > 0){
+				$this->paymentId = func_get_arg(0);
+			}
+			
+			if ($this->hasPaymentId() == false){
 				return false;
 			}
 			
@@ -185,13 +229,39 @@
 			return $retval;
 		}
 		
+		public function getPaymentID(){
+			return $this->paymentId;
+		}
+		
+		public function getTokenID(){
+			return $this->tokenId;
+		}
+		
+		public function registerWebHook($name, $url){
+			$ch = new Curl();
+			$ch->setHeader('Content-Type', 'application/json');
+			$ch->setHeader('Authorization', "Basic " . base64_encode($this->sk_key . ":"));
+			
+			$data = array(
+				'name' => $name,
+				'callbackUrl' => $url
+			);
+			
+			$ch->post($this->url . $this->urlPath['webhooks'], json_encode($data));
+			
+			$retval = $ch->response;
+			$ch->close();
+			
+			return $retval;
+		}
+		
 		private function generateReqCreateToken(){
 			return array(
 				'card' => array(
-					'number' => (isset($this->CardDetails->cardNumber)? str_replace(' ', '', trim($this->CardDetails->cardNumber)) : ""),
-					'expMonth' => (isset($this->CardDetails->cardExpiryMonth)? $this->CardDetails->cardExpiryMonth : ""),
-					'expYear' => (isset($this->CardDetails->cardExpiryYear)? $this->CardDetails->cardExpiryYear : ""),
-					'cvc' => (isset($this->CardDetails->cardCVC)? $this->CardDetails->cardCVC : ""),
+					'number' => (isset($this->CardDetails->cardNumber)? $this->removeWhitespace($this->CardDetails->cardNumber) : ""),
+					'expMonth' => (isset($this->CardDetails->cardExpiryMonth)? $this->removeWhitespace($this->CardDetails->cardExpiryMonth) : ""),
+					'expYear' => (isset($this->CardDetails->cardExpiryYear)? $this->removeWhitespace($this->CardDetails->cardExpiryYear) : ""),
+					'cvc' => (isset($this->CardDetails->cardCVC)? $this->removeWhitespace($this->CardDetails->cardCVC) : ""),
 				)
 			);
 		}
@@ -219,8 +289,17 @@
 				        "zipCode" => (isset($this->CustomerDetails->zipCode)? $this->CustomerDetails->zipCode : " "),
 				        "countryCode" => (isset($this->CustomerDetails->countryCode)? $this->CustomerDetails->countryCode : " ")
 				    )
+				),
+				"redirectUrl" => array(
+					"success" => (isset($this->RedirectionURL->success)? $this->removeWhitespace($this->RedirectionURL->success) : " "),
+				    "failure" => (isset($this->RedirectionURL->failure)? $this->removeWhitespace($this->RedirectionURL->failure) : " "),
+				    "cancel" => (isset($this->RedirectionURL->cancel)? $this->removeWhitespace($this->RedirectionURL->cancel) : " ")
 				)
 			);
+		}
+		
+		private function removeWhitespace($value){
+			return str_replace(' ', '', trim($value));
 		}
 		
 	}
