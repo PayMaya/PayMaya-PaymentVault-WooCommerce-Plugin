@@ -53,8 +53,6 @@ add_action('activated_plugin', 'paymaya_paymentvault_loadfirst');
 function paymaya_paymentvault_loadfirst(){
 	global $woocommerce;
 	global $wpdb;
-	
-	
 }
 	
 register_activation_hook( __FILE__,'paymaya_paymentvault_data_activate');

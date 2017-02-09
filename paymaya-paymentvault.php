@@ -26,13 +26,13 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
     foreach($this->settings as $setting_key => $value) {
       $this->$setting_key = $value;
     }
-
-    add_action( 'admin_notices', array( $this, 'do_ssl_check' ) );
-    //add_action( 'admin_notices', array( $this, 'register_webhook' ) );
+	
+	  add_action('wp_enqueue_scripts', array(&$this, 'override_frontend_scripts'));
+	  add_action('wp_enqueue_scripts', array(&$this, 'paymentvault_scripts'));
 	  add_action('woocommerce_api_'.strtolower(get_class($this)), array(&$this, 'paymaya_paymentvault_success_payment'));
-	
-	
+		  
 	  if(is_admin()) {
+	    add_action( 'admin_notices', array( $this, 'do_ssl_check' ) );
       add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
     }
   }
@@ -117,7 +117,9 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	}
 	
 	public function form() {
+	  wp_enqueue_script('paymaya');
 		wp_enqueue_script( 'wc-credit-card-form' );
+	  wp_enqueue_script('paymentvaultjs');
 		
 		$fields = array();
 			
@@ -152,6 +154,10 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 				}
 			?>
 			<?php do_action( 'woocommerce_credit_card_form_end', $this->id ); ?>
+			<input type="hidden" id="wc-gateway-id" name="wc-gateway-id" value="" />
+			<input type="hidden" id="wc-gateway-nonce" name="wc-gateway-nonce" value="<?=$this->public_facing_api_key;?>" />
+			<input type="hidden" id="wc-gateway-sandbox" name="wc-gateway-sandbox" value="<?= $this->environment;?>" />
+			<input type="hidden" id="wc-gateway-name" name="wc-gateway-name" value="<?= esc_attr( $this->id );?>" />
 			<div class="clear"></div>
 		</fieldset>
 		<?php
@@ -179,11 +185,9 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  $pv->RedirectionURL->failure = $order->get_checkout_payment_url(false);
 	  $pv->RedirectionURL->cancel = $this->get_return_url($order);
 	  
-	  $expiryDate = explode(chr(47), $wcpgData[esc_attr($this->id) .'-card-expiry']);
-		$pv->CardDetails->cardNumber = $wcpgData[esc_attr($this->id) .'-card-number'];
-		$pv->CardDetails->cardExpiryMonth = trim($expiryDate[0]);
-	  $pv->CardDetails->cardExpiryYear = trim($expiryDate[1]);
-	  $pv->CardDetails->cardCVC = $wcpgData[esc_attr($this->id) .'-card-cvc'];
+	  $tokenResp = json_decode(base64_decode($wcpgData['wc-gateway-id']));
+			
+	  $pv->setTokenState((isset($tokenResp->state)? $tokenResp->state : ' '));
 	  
 	  $pv->CustomerDetails->firstName = $wcpgData['billing_first_name'];
 	  $pv->CustomerDetails->middleName = " ";
@@ -201,7 +205,7 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  $pv->registerWebHook('3DS_PAYMENT_SUCCESS',$this->getWebHookUrl());
 	  $pv->registerWebHook('3DS_PAYMENT_FAILURE',$this->getWebHookUrl());
 	  
-	  $retVal = $pv->createPayment();
+	  $retVal = $pv->createPayment((isset($tokenResp->paymentTokenId)? $tokenResp->paymentTokenId : ' '));
 	  
 	  $wcpvd = new WC_PaymentVaultData();
 	  $wcpvd->order_id = $order_id;
@@ -209,68 +213,19 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  $wcpvd->token_id = $pv->getTokenID();
 	  $wcpvd->save();
 			
-	  switch ($retVal->status){
-			  case 'PAYMENT_SUCCESS':
-		      $order->payment_complete();
-		      return array('result' => 'success', 'redirect' => $this->get_return_url($order));
-			  	break;
-			  case 'PENDING_PAYMENT':
-					if($pv->is3DSEnabled() == true){
-			      return array('result' => 'success', 'redirect' => urldecode($retVal->verificationUrl));
-					}
-					else{
-			      $order->update_status('on-hold', __('Awaiting cheque payment', 'woothemes'));
-					}
-			  	break;
-			  case 'PAYMENT_FAILED':
-		      wc_add_notice( __('Payment error:', 'woothemes') . 'Sorry, your payment failed. No charges were made.', 'error' );
-			  	break;
-			  case 'PAYMENT_INVALID':
-			  	break;
-		    case 'VOIDED':
-			    break;
-		    case 'REFUNDED':
-			    break;
-			  default:
-			  	break;
-	  }
-	}
-	
-	public function paymaya_paymentvault_success_payment(){
-		global $woocommerce;
-		global $wpdb;
-	  
-	  /*$sampleData = array(
-	    "id" => "78882766-pl78-4fa1-6643-cce9087d3e81",
-	    "isPaid" => "true",
-	    "status" => "PAYMENT_SUCCESS",
-	    "amount" => "100",
-	    "currency" => "PHP",
-	    "createdAt" => "2016-11-08T02:40:48.000Z",
-	    "updatedAt" => "2016-11-08T02:40:51.000Z",
-	    "description" => "Charge for ysadcsantos@gmail.com",
-	    "paymentTokenId" => "68aKLAN64"
-	    );
-	  
-	  $sampleData = '{"id": "07346475-5a0b-441c-b002-8c8cca8ccc83","isPaid": true,"status": "PAYMENT_SUCCESS","amount": 100,"currency": "PHP","createdAt": "2016-11-08T02:40:48.000Z","updatedAt": "2016-11-08T02:40:51.000Z","description": "Charge for ysadcsantos@gmail.com","paymentTokenId": "68aKLAN64CXK7XWDA1HwSE6COo"}';
-	  $postData = (empty($sampleData) == true? new stdClass() : json_decode(html_entity_decode($sampleData)));
-	  */
-	  
-		$postData = (empty($_POST)? new stdClass() : json_decode(html_entity_decode($_POST)));
-			
-	  $wcpvd = new WC_PaymentVaultData();
-	  
-	  $results = $wcpvd->getRow('payment_id', $postData->id);
-	  
-	  if($results == true){
-	  	$order = new WC_Order($wcpvd->order_id);
-	  
-	    switch ($postData->status){
+	  if($retVal !== false){
+	    switch ($retVal->status){
 		    case 'PAYMENT_SUCCESS':
 			    $order->payment_complete();
+			    return array('result' => 'success', 'redirect' => $this->get_return_url($order));
 			    break;
 		    case 'PENDING_PAYMENT':
-		      $order->update_status('on-hold', __('Awaiting cheque payment', 'woothemes'));
+			    if($pv->is3DSEnabled() == true){
+				    return array('result' => 'success', 'redirect' => urldecode($retVal->verificationUrl));
+			    }
+			    else{
+				    $order->update_status('on-hold', __('Awaiting cheque payment', 'woothemes'));
+			    }
 			    break;
 		    case 'PAYMENT_FAILED':
 			    wc_add_notice( __('Payment error:', 'woothemes') . 'Sorry, your payment failed. No charges were made.', 'error' );
@@ -287,6 +242,60 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  }
 	}
 	
+	public function paymaya_paymentvault_success_payment(){
+		global $woocommerce;
+		global $wpdb;
+			
+	  /*$sampleData = array(
+	    "id" => "78882766-pl78-4fa1-6643-cce9087d3e81",
+	    "isPaid" => "true",
+	    "status" => "PAYMENT_SUCCESS",
+	    "amount" => "100",
+	    "currency" => "PHP",
+	    "createdAt" => "2016-11-08T02:40:48.000Z",
+	    "updatedAt" => "2016-11-08T02:40:51.000Z",
+	    "description" => "Charge for ysadcsantos@gmail.com",
+	    "paymentTokenId" => "68aKLAN64"
+	    );
+	  
+	  $sampleData = '{"id": "07346475-5a0b-441c-b002-8c8cca8ccc83","isPaid": true,"status": "PAYMENT_SUCCESS","amount": 100,"currency": "PHP","createdAt": "2016-11-08T02:40:48.000Z","updatedAt": "2016-11-08T02:40:51.000Z","description": "Charge for ysadcsantos@gmail.com","paymentTokenId": "68aKLAN64CXK7XWDA1HwSE6COo"}';
+	  $postData = (empty($sampleData) == true? new stdClass() : json_decode(html_entity_decode($sampleData)));
+	  */
+	  
+	  //uncomment this line when not using a local server
+		$postData = (empty($_POST)? new stdClass() : json_decode(html_entity_decode($_POST)));
+			
+	  $wcpvd = new WC_PaymentVaultData();
+	  
+	  $results = $wcpvd->getRow('payment_id', $postData->id);
+	  
+	  if($results == true){
+	  	$order = new WC_Order($wcpvd->order_id);
+	  
+	    if(isset($postData->status) == true){
+	      switch ($postData->status){
+		      case 'PAYMENT_SUCCESS':
+			      $order->payment_complete();
+			      break;
+		      case 'PENDING_PAYMENT':
+			      $order->update_status('on-hold', __('Awaiting cheque payment', 'woothemes'));
+			      break;
+		      case 'PAYMENT_FAILED':
+			      wc_add_notice( __('Payment error:', 'woothemes') . 'Sorry, your payment failed. No charges were made.', 'error' );
+			      break;
+		      case 'PAYMENT_INVALID':
+			      break;
+		      case 'VOIDED':
+			      break;
+		      case 'REFUNDED':
+			      break;
+		      default:
+			      break;
+	      }
+	    }
+	  }
+	}
+	
 	public function getWebHookUrl(){
 	  global $woocommerce;
 			
@@ -297,9 +306,21 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	    $path = '/?wc-api=paymaya_paymentvault';
 	  }
 	  
-	  $protocol = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] != 'off') || $_SERVER['SERVER_PORT'] == 443 || $_SERVER['HTTP_X_FORWARDED_PORT'] == 443) ? "https://" : "http://";
+	  $httpXforwarded = (isset($_SERVER['HTTP_X_FORWARDED_PORT'])? $_SERVER['HTTP_X_FORWARDED_PORT'] : 0);
+			  
+	  $protocol = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] != 'off') || $_SERVER['SERVER_PORT'] == 443 || $httpXforwarded == 443) ? "https://" : "http://";
 	  $url = $protocol . $_SERVER['HTTP_HOST'] . $path;
 	  
 	  return $url;
+	}
+	
+	public function paymentvault_scripts() {
+		wp_register_script( 'paymaya', plugins_url("js/paymaya.min.js", __FILE__), array( 'jquery', 'woocommerce', 'wc-country-select', 'wc-address-i18n'), '1.0', false );
+		wp_register_script( 'paymentvaultjs', plugins_url("js/paymentvault.js", __FILE__), array( 'jquery', 'woocommerce', 'wc-country-select', 'wc-address-i18n', 'wc-checkout', 'paymaya'), '1.0', true);
+	}
+	
+	public function override_frontend_scripts() {
+		wp_deregister_script('wc-checkout');
+		wp_enqueue_script('wc-checkout', plugins_url("js/paymentvault-checkout.js", __FILE__), array('jquery', 'woocommerce', 'wc-country-select', 'wc-address-i18n'), null, true);
 	}
 }

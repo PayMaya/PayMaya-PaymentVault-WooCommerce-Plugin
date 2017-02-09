@@ -170,10 +170,16 @@
 			$ch->setHeader('Authorization', "Basic " . base64_encode($this->pk_key . ":"));
 			$ch->post($this->url . $this->urlPath['createToken'], json_encode($this->generateReqCreateToken()));
 			
-			$retval = $ch->response;
+			if($ch->error){
+				$retval = false;
+			}
+			else{
+				$retval = $ch->response;
+				$this->tokenId = (isset($retval->paymentTokenId)? $retval->paymentTokenId : ' ');
+				$this->tokenState = (isset($retval->state)? $retval->state : ' ');
+			}
+			
 			$ch->close();
-			$this->tokenId = $retval->paymentTokenId;
-			$this->tokenState = $retval->state;
 			
 			return $retval;
 		}
@@ -197,11 +203,15 @@
 			$ch->setHeader('Authorization', "Basic " . base64_encode($this->sk_key . ":"));
 			$ch->post($this->url . $this->urlPath['payments'], json_encode($this->generateReqCreatePayment()));
 			
-			$retval = $ch->response;
-			$ch->close();
+			if ($ch->error) {
+				$retval = false;
+			} else {
+				$retval = $ch->response;
+				$this->paymentId = $retval->id;
+				$this->is3dsEnabled = (isset($retval->verificationUrl) == true? true : false);
+			}
 			
-			$this->paymentId = $retval->id;
-			$this->is3dsEnabled = (isset($retval->verificationUrl) == true? true : false);
+			$ch->close();
 			
 			return $retval;
 		}
@@ -223,7 +233,13 @@
 			$ch->setHeader('Authorization', "Basic " . base64_encode($this->sk_key . ":"));
 			$ch->get($this->url . $this->urlPath['payments'] . chr(47) . $this->paymentId);
 			
-			$retval = $ch->response;
+			if($ch->error){
+				$retval = false;
+			}
+			else{
+				$retval = $ch->response;
+			}
+			
 			$ch->close();
 			
 			return $retval;
@@ -235,6 +251,18 @@
 		
 		public function getTokenID(){
 			return $this->tokenId;
+		}
+		
+		public function setTokenId($value){
+			$this->tokenId = $value;
+		}
+		
+		public function getTokenState(){
+			return $this->tokenState;
+		}
+		
+		public function setTokenState($value){
+			$this->tokenState = $value;
 		}
 		
 		public function registerWebHook($name, $url){
