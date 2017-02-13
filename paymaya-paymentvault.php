@@ -29,7 +29,7 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	
 	  add_action('wp_enqueue_scripts', array(&$this, 'override_frontend_scripts'));
 	  add_action('wp_enqueue_scripts', array(&$this, 'paymentvault_scripts'));
-	  add_action('woocommerce_api_'.strtolower(get_class($this)), array(&$this, 'paymaya_paymentvault_success_payment'));
+	  add_action('woocommerce_api_'.strtolower(get_class($this)), array(&$this, 'paymaya_paymentvault_webhook_handler'));
 		  
 	  if(is_admin()) {
 	    add_action( 'admin_notices', array( $this, 'do_ssl_check' ) );
@@ -216,7 +216,6 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  $wcpvd->payment_id = $pv->getPaymentID();
 	  $wcpvd->token_id = $pv->getTokenID();
 	  $wcpvd->save();
-			
 	  
 	  if($retVal !== false){
 	    switch ($retVal->status){
@@ -247,27 +246,12 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  }
 	}
 	
-	public function paymaya_paymentvault_success_payment(){
-		global $woocommerce;
-		global $wpdb;
+	public function paymaya_paymentvault_webhook_handler(){
 			
-	  /*$sampleData = array(
-	    "id" => "78882766-pl78-4fa1-6643-cce9087d3e81",
-	    "isPaid" => "true",
-	    "status" => "PAYMENT_SUCCESS",
-	    "amount" => "100",
-	    "currency" => "PHP",
-	    "createdAt" => "2016-11-08T02:40:48.000Z",
-	    "updatedAt" => "2016-11-08T02:40:51.000Z",
-	    "description" => "Charge for ysadcsantos@gmail.com",
-	    "paymentTokenId" => "68aKLAN64"
-	    );
+	  if($this->environment == 'yes'){
+	  	$this->debugWebHook();
+	  }
 	  
-	  $sampleData = '{"id": "07346475-5a0b-441c-b002-8c8cca8ccc83","isPaid": true,"status": "PAYMENT_SUCCESS","amount": 100,"currency": "PHP","createdAt": "2016-11-08T02:40:48.000Z","updatedAt": "2016-11-08T02:40:51.000Z","description": "Charge for ysadcsantos@gmail.com","paymentTokenId": "68aKLAN64CXK7XWDA1HwSE6COo"}';
-	  $postData = (empty($sampleData) == true? new stdClass() : json_decode(html_entity_decode($sampleData)));
-	  */
-	  
-	  //uncomment this line when not using a local server
 		$postData = (empty($_POST)? new stdClass() : json_decode(html_entity_decode($_POST)));
 			
 	  $wcpvd = new WC_PaymentVaultData();
@@ -305,7 +289,7 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  global $woocommerce;
 			
 	  if($woocommerce->version > 2.0){
-	  	$path = '/wc-api/paymaya_paymentvault/';
+	  	$path = '/wc-api/paymaya_paymentvault';
 	  }
 	  else{
 	    $path = '/?wc-api=paymaya_paymentvault';
@@ -327,5 +311,23 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	public function override_frontend_scripts() {
 		wp_deregister_script('wc-checkout');
 		wp_enqueue_script('wc-checkout', plugins_url("js/paymentvault-checkout.js", __FILE__), array('jquery', 'woocommerce', 'wc-country-select', 'wc-address-i18n'), null, true);
+	}
+	
+	private function debugWebHook(){
+	  $myfile = fopen(__DIR__ . "/webhook_dump.txt", "a+");
+	  fwrite($myfile, "--------------------------------------------------------------------------------------------------------------------------". "\n");
+	  $h = "8";
+	  $hm = $h * 60;
+	  $ms = $hm * 60;
+	  $txt = "TIME:" . gmdate("m-d-y h:i:sa", time()+($ms)) . "\n";
+	  fwrite($myfile, $txt);
+	  $servertxt = $_SERVER;
+	  fwrite($myfile, "SERVER DATA: " . json_encode($servertxt)  . "\n");
+	  $gettxt = $_GET;
+	  fwrite($myfile, "GET DATA: " . json_encode($gettxt) . "\n");
+	  $posttxt = $_POST;
+	  fwrite($myfile, "POST DATA: " . json_encode($posttxt) . "\n");
+	  fwrite($myfile, "--------------------------------------------------------------------------------------------------------------------------". "\n");
+	  fclose($myfile);
 	}
 }
