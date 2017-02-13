@@ -283,6 +283,48 @@
 			return $retval;
 		}
 		
+		public function getListOfWebHooks(){
+			$ch = new Curl();
+			$ch->setHeader('Content-Type', 'application/json');
+			$ch->setHeader('Authorization', "Basic " . base64_encode($this->sk_key . ":"));
+			$ch->get($this->url . $this->urlPath['webhooks']);
+			
+			if($ch->error){
+				$retval = false;
+			}
+			else{
+				$retval = $ch->response;
+			}
+			
+			$ch->close();
+			
+			return $retval;
+		}
+		
+		public function updateWebHooks($webhookID,$name, $url){
+			$ch = new Curl();
+			$ch->setHeader('Content-Type', 'application/json');
+			$ch->setHeader('Authorization', "Basic " . base64_encode($this->sk_key . ":"));
+			
+			$data = array(
+				'name' => $name,
+				'callbackUrl' => $url
+			);
+			
+			$ch->put($this->url . $this->urlPath['webhooks'] . chr(47) . $webhookID, $data);
+			
+			if($ch->error){
+				$retval = false;
+			}
+			else{
+				$retval = $ch->response;
+			}
+			
+			$ch->close();
+			
+			return $retval;
+		}
+		
 		private function generateReqCreateToken(){
 			return array(
 				'card' => array(

@@ -201,10 +201,14 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  $pv->CustomerDetails->zipCode = $wcpgData['billing_postcode'];
 	  $pv->CustomerDetails->countryCode = $wcpgData['billing_country'];
 	  
-	  //Delete this 2 lines once it has a UI for webhook
-	  $pv->registerWebHook('3DS_PAYMENT_SUCCESS',$this->getWebHookUrl());
-	  $pv->registerWebHook('3DS_PAYMENT_FAILURE',$this->getWebHookUrl());
-	  
+	  //Delete Line:205-210 once it has a UI for webhook
+		$webhook = $pv->getListOfWebHooks();
+		if($webhook != false){
+			for($i = 0; $i < count($webhook); $i++){
+		    $pv->updateWebHooks($webhook[$i]->id, $webhook[$i]->name, $this->getWebHookUrl());
+			}
+		}
+			
 	  $retVal = $pv->createPayment((isset($tokenResp->paymentTokenId)? $tokenResp->paymentTokenId : ' '));
 	  
 	  $wcpvd = new WC_PaymentVaultData();
@@ -213,6 +217,7 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  $wcpvd->token_id = $pv->getTokenID();
 	  $wcpvd->save();
 			
+	  
 	  if($retVal !== false){
 	    switch ($retVal->status){
 		    case 'PAYMENT_SUCCESS':
