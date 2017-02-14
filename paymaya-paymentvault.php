@@ -30,12 +30,49 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  add_action('wp_enqueue_scripts', array(&$this, 'override_frontend_scripts'));
 	  add_action('wp_enqueue_scripts', array(&$this, 'paymentvault_scripts'));
 	  add_action('woocommerce_api_'.strtolower(get_class($this)), array(&$this, 'paymaya_paymentvault_webhook_handler'));
+	  add_action( 'woocommerce_thankyou', array(&$this, 'thankYouPage'));
 		  
 	  if(is_admin()) {
 	    add_action( 'admin_notices', array( $this, 'do_ssl_check' ) );
       add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
     }
   }
+	
+	public function thankYouPage($order_id){
+	  $pv = new \PayMayaPaymentVault\PaymentVault($this->public_facing_api_key, $this->secret_api_key, $this->environment);
+		$order = new WC_Order($order_id);
+	  $wcpvd = new WC_PaymentVaultData();
+	  
+		if ($order->status == 'pending') {
+			$results = $wcpvd->getRow('order_id', trim($order->id));
+			
+			if($results == true){
+				$pvState = $pv->getPayment($wcpvd->payment_id);
+		  
+			  if(isset($pvState->status) == true){
+				  switch ($pvState->status){
+					  case 'PAYMENT_SUCCESS':
+						  $order->payment_complete();
+						  break;
+					  case 'PENDING_PAYMENT':
+						  $order->update_status('on-hold', __('Awaiting cheque payment', 'woothemes'));
+						  break;
+					  case 'PAYMENT_FAILED':
+						  wc_add_notice( __('Payment error:', 'woothemes') . 'Sorry, your payment failed. No charges were made.', 'error' );
+						  break;
+					  case 'PAYMENT_INVALID':
+						  break;
+					  case 'VOIDED':
+						  break;
+					  case 'REFUNDED':
+						  break;
+					  default:
+						  break;
+				  }
+			  }
+			}
+		}
+	}
 
   public function init_form_fields() {
     $this->form_fields = array(
@@ -201,7 +238,7 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  $pv->CustomerDetails->zipCode = $wcpgData['billing_postcode'];
 	  $pv->CustomerDetails->countryCode = $wcpgData['billing_country'];
 	  
-	  //Delete Line:205-210 once it has a UI for webhook
+	  //Delete Line:242-247 once it has a UI for webhook
 		$webhook = $pv->getListOfWebHooks();
 		if($webhook != false){
 			for($i = 0; $i < count($webhook); $i++){
