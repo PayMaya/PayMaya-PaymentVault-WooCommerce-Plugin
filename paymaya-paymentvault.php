@@ -341,8 +341,8 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	}
 	
 	public function paymentvault_scripts() {
-		wp_register_script( 'paymaya', plugins_url("js/paymaya.min.js", __FILE__), array( 'jquery', 'woocommerce', 'wc-country-select', 'wc-address-i18n'), '1.0', false );
-		wp_register_script( 'paymentvaultjs', plugins_url("js/paymentvault.js", __FILE__), array( 'jquery', 'woocommerce', 'wc-country-select', 'wc-address-i18n', 'wc-checkout', 'paymaya'), '1.0', true);
+		wp_register_script('paymaya', plugins_url("js/paymaya.min.js", __FILE__), array( 'jquery', 'woocommerce', 'wc-country-select', 'wc-address-i18n'), '1.0', false );
+		wp_register_script('paymentvaultjs', plugins_url("js/paymentvault.js", __FILE__), array( 'jquery', 'woocommerce', 'wc-country-select', 'wc-address-i18n', 'wc-checkout', 'paymaya'), '1.0', true);
 	}
 	
 	public function override_frontend_scripts() {
@@ -351,7 +351,18 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	}
 	
 	private function debugWebHook(){
-	  $myfile = fopen(__DIR__ . "/webhook_dump.txt", "a+");
+	  $filepath = __DIR__ . "/webhook_dump.txt";
+	  
+	  $fileSize = filesize($filepath);
+	  
+	  if(($fileSize / 1024) >= 14648){
+		  //delete all contents
+		  $file = fopen($filepath, 'w');
+		  fwrite($file, "");
+		  fclose($file);
+	  }
+	  
+	  $myfile = fopen($filepath, "a+");
 	  fwrite($myfile, "--------------------------------------------------------------------------------------------------------------------------". "\n");
 	  $h = "8";
 	  $hm = $h * 60;
