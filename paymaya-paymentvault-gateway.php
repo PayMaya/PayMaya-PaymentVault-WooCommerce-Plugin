@@ -28,7 +28,6 @@ function paymaya_paymentvault_init() {
 	// Now that we have successfully included our class,
 	// Lets add it too WooCommerce
 	add_filter( 'woocommerce_payment_gateways', 'paymaya_paymentvault_add_gateway' );
-	
 }
 	
 function paymaya_paymentvault_add_gateway($methods ) {

@@ -9,7 +9,7 @@
 	require_once __DIR__ . "/Curl/CaseInsensitiveArray.php";
 	require_once __DIR__ . "/Curl/MultiCurl.php";
 	
-	class CardDetails {
+	class CardDetailsObject {
 		public $cardNumber;
 		public $cardExpiryMonth;
 		public $cardExpiryYear;
@@ -39,7 +39,7 @@
 		}
 	}
 	
-	class RedirectionURL{
+	class RedirectionURLObject{
 		public $success;
 		public $failure;
 		public $cancel;
@@ -55,7 +55,29 @@
 		}
 	}
 	
-	class CustomersDetails {
+	class RefundObject{
+		public $refundID;
+		public $paymentID;
+		public $reason;
+		public $totalAmount;
+		public $currency;
+		public $status;
+		
+		function __construct() {
+			
+		}
+		
+		function __destruct() {
+			$this->refundID = null;
+			$this->paymentID = null;
+			$this->reason = null;
+			$this->totalAmount = null;
+			$this->currency = null;
+			$this->status = null;
+		}
+	}
+	
+	class CustomersDetailsObject {
 		public $firstName;
 		public $middleName;
 		public $lastName;
@@ -111,12 +133,13 @@
 		private $is3dsEnabled = false;
 		private $paymayaUrl = array(
 			"sandbox" => 'https://pg-sandbox.paymaya.com/payments',
-			"production" => ''
+			"production" => 'https://pg.paymaya.com/payments'
 		);
 		private $urlPath = array(
 			'createToken' => '/v1/payment-tokens',
 			'payments' => '/v1/payments',
-			'webhooks' => '/v1/webhooks'
+			'webhooks' => '/v1/webhooks',
+			'refunds' => '/v1/payments'
 		);
 		
 		public $totalAmount;
@@ -124,15 +147,17 @@
 		public $CustomerDetails;
 		public $CardDetails;
 		public $RedirectionURL;
+		public $Refunds;
 		
 		function __construct($publicKey, $secretKey, $env) {
 			$this->pk_key = trim($publicKey);
 			$this->sk_key = trim($secretKey);
 			$this->url = $this->paymayaUrl[($env == "yes"? "sandbox" : "production")];
 			
-			$this->CustomerDetails = new CustomersDetails();
-			$this->CardDetails = new CardDetails();
-			$this->RedirectionURL = new RedirectionURL();
+			$this->CustomerDetails = new CustomersDetailsObject();
+			$this->CardDetails = new CardDetailsObject();
+			$this->RedirectionURL = new RedirectionURLObject();
+			$this->Refunds = new RefundObject();
 		}
 		
 		function __destruct() {
@@ -165,9 +190,7 @@
 		}
 		
 		public function getToken(){
-			$ch = new Curl();
-			$ch->setHeader('Content-Type', 'application/json');
-			$ch->setHeader('Authorization', "Basic " . base64_encode($this->pk_key . ":"));
+			$ch = & $this->getCurlInstance();
 			$ch->post($this->url . $this->urlPath['createToken'], json_encode($this->generateReqCreateToken()));
 			
 			if($ch->error){
@@ -198,9 +221,7 @@
 				return false;
 			}
 			
-			$ch = new Curl();
-			$ch->setHeader('Content-Type', 'application/json');
-			$ch->setHeader('Authorization', "Basic " . base64_encode($this->sk_key . ":"));
+			$ch = & $this->getCurlInstance();
 			$ch->post($this->url . $this->urlPath['payments'], json_encode($this->generateReqCreatePayment()));
 			
 			if ($ch->error) {
@@ -228,9 +249,7 @@
 				return false;
 			}
 			
-			$ch = new Curl();
-			$ch->setHeader('Content-Type', 'application/json');
-			$ch->setHeader('Authorization', "Basic " . base64_encode($this->sk_key . ":"));
+			$ch = & $this->getCurlInstance();
 			$ch->get($this->url . $this->urlPath['payments'] . chr(47) . $this->paymentId);
 			
 			if($ch->error){
@@ -266,9 +285,7 @@
 		}
 		
 		public function registerWebHook($name, $url){
-			$ch = new Curl();
-			$ch->setHeader('Content-Type', 'application/json');
-			$ch->setHeader('Authorization', "Basic " . base64_encode($this->sk_key . ":"));
+			$ch = & $this->getCurlInstance();
 			
 			$data = array(
 				'name' => $name,
@@ -277,16 +294,20 @@
 			
 			$ch->post($this->url . $this->urlPath['webhooks'], json_encode($data));
 			
-			$retval = $ch->response;
+			if($ch->error){
+				$retval = false;
+			}
+			else{
+				$retval = $ch->response;
+			}
+			
 			$ch->close();
 			
 			return $retval;
 		}
 		
 		public function getListOfWebHooks(){
-			$ch = new Curl();
-			$ch->setHeader('Content-Type', 'application/json');
-			$ch->setHeader('Authorization', "Basic " . base64_encode($this->sk_key . ":"));
+			$ch = & $this->getCurlInstance();
 			$ch->get($this->url . $this->urlPath['webhooks']);
 			
 			if($ch->error){
@@ -302,9 +323,7 @@
 		}
 		
 		public function updateWebHooks($webhookID,$name, $url){
-			$ch = new Curl();
-			$ch->setHeader('Content-Type', 'application/json');
-			$ch->setHeader('Authorization', "Basic " . base64_encode($this->sk_key . ":"));
+			$ch = & $this->getCurlInstance();
 			
 			$data = array(
 				'name' => $name,
@@ -325,13 +344,95 @@
 			return $retval;
 		}
 		
+		public function getWebHooks($webhookID){
+			$ch = & $this->getCurlInstance();
+			$ch->get($this->url . $this->urlPath['webhooks'] . chr(47) . $webhookID);
+			
+			if($ch->error){
+				$retval = false;
+			}
+			else{
+				$retval = $ch->response;
+			}
+			
+			$ch->close();
+			
+			return $retval;
+		}
+		
+		public function createRefunds(){
+			$ch = & $this->getCurlInstance();
+			
+			settype($this->Refunds->totalAmount,'float');
+			
+			$data = array(
+				'reason' => $this->Refunds->reason,
+				'totalAmount' => array(
+					'amount' => $this->Refunds->totalAmount,
+					'currency' => $this->Refunds->currency
+				)
+			);
+			
+			$ch->post($this->url . $this->urlPath['refunds'] . chr(47) . $this->Refunds->paymentID . chr(47) . "refunds", $data);
+			
+			if($ch->error){
+				$retval = false;
+			}
+			else{
+				$obj = $ch->response;
+				$retval = new RefundObject();
+				$retval->refundID = $this->isObjExist($obj->id, '');
+				$retval->reason = $this->isObjExist($obj->reason, '');
+				$retval->totalAmount = $this->isObjExist($obj->amount, 0);
+				$retval->currency = $this->isObjExist($obj->currency, 'PHP');
+				$retval->status = $this->isObjExist($obj->status, '');
+				$retval->paymentID = $this->isObjExist($obj->payment, '');
+			}
+			
+			$ch->close();
+			
+			return $retval;
+		}
+		
+		public function getRefunds(){
+			$ch = & $this->getCurlInstance();
+			$ch->get($this->url . $this->urlPath['refunds'] . chr(47) . $this->Refunds->paymentID . chr(47) . "refunds");
+			
+			if($ch->error){
+				$retval = false;
+			}
+			else{
+				$retval = $ch->response;
+			}
+			
+			$ch->close();
+			
+			return $retval;
+		}
+		
+		public function getRefundInfo(){
+			$ch = & $this->getCurlInstance();
+			$ch->get($this->url . $this->urlPath['refunds'] . chr(47) . $this->Refunds->paymentID . chr(47) . "refunds" . chr(47) . $this->Refunds->refundID);
+			
+			if($ch->error){
+				$retval = false;
+			}
+			else{
+				$retval = $ch->response;
+			}
+			
+			$ch->close();
+			
+			return $retval;
+		}
+		
 		private function generateReqCreateToken(){
 			return array(
 				'card' => array(
-					'number' => (isset($this->CardDetails->cardNumber)? $this->removeWhitespace($this->CardDetails->cardNumber) : ""),
-					'expMonth' => (isset($this->CardDetails->cardExpiryMonth)? $this->removeWhitespace($this->CardDetails->cardExpiryMonth) : ""),
-					'expYear' => (isset($this->CardDetails->cardExpiryYear)? $this->removeWhitespace($this->CardDetails->cardExpiryYear) : ""),
-					'cvc' => (isset($this->CardDetails->cardCVC)? $this->removeWhitespace($this->CardDetails->cardCVC) : ""),
+					'number' => $this->removeWhitespace($this->isObjExist($this->CardDetails->cardNumber, "")),
+					'expMonth' => $this->removeWhitespace($this->isObjExist($this->CardDetails->cardExpiryMonth, "")),
+					'expYear' => $this->removeWhitespace($this->isObjExist($this->CardDetails->cardExpiryYear, "")),
+					'cvc' => $this->removeWhitespace($this->isObjExist($this->CardDetails->cardCVC, "")),
 				)
 			);
 		}
@@ -340,32 +441,43 @@
 			return array(
 				'paymentTokenId' => $this->tokenId,
 				'totalAmount' => array(
-					"amount" => (isset($this->totalAmount)? $this->totalAmount : 0),
-                    "currency" => (isset($this->currency)? $this->currency : " ")
+					"amount" => $this->isObjExist($this->totalAmount, 0),
+                    "currency" => $this->isObjExist($this->currency, " ")
 				),
 				'buyer' => array(
-					"firstName" => (isset($this->CustomerDetails->firstName)? $this->CustomerDetails->firstName : " "),
-				    "middleName" => (isset($this->CustomerDetails->middleName)? $this->CustomerDetails->middleName : " "),
-				    "lastName" => (isset($this->CustomerDetails->lastName)? $this->CustomerDetails->lastName : " "),
+					"firstName" => $this->isObjExist($this->CustomerDetails->firstName, " "),
+				    "middleName" => $this->isObjExist($this->CustomerDetails->middleName, " "),
+				    "lastName" => $this->isObjExist($this->CustomerDetails->lastName, " "),
 				    "contact" => array(
-					    "phone" => (isset($this->CustomerDetails->phone)? $this->CustomerDetails->phone : " "),
-				        "email" => (isset($this->CustomerDetails->email)? $this->CustomerDetails->email : " ")
+					    "phone" => $this->isObjExist($this->CustomerDetails->phone, " "),
+				        "email" => $this->isObjExist($this->CustomerDetails->email, " ")
 				    ),
 				    "billingAddress" => array(
-					    "line1" => (isset($this->CustomerDetails->line1)? $this->CustomerDetails->line1 : " "),
-				        "line2" => (isset($this->CustomerDetails->line2)? $this->CustomerDetails->line2 : " "),
-				        "city" => (isset($this->CustomerDetails->city)? $this->CustomerDetails->city : " "),
-				        "state" => (isset($this->CustomerDetails->state)? $this->CustomerDetails->state : " "),
-				        "zipCode" => (isset($this->CustomerDetails->zipCode)? $this->CustomerDetails->zipCode : " "),
-				        "countryCode" => (isset($this->CustomerDetails->countryCode)? $this->CustomerDetails->countryCode : " ")
+					    "line1" => $this->isObjExist($this->CustomerDetails->line1, " "),
+				        "line2" => $this->isObjExist($this->CustomerDetails->line2, " "),
+				        "city" => $this->isObjExist($this->CustomerDetails->city, " "),
+				        "state" => $this->isObjExist($this->CustomerDetails->state, " "),
+				        "zipCode" => $this->isObjExist($this->CustomerDetails->zipCode, " "),
+				        "countryCode" => $this->isObjExist($this->CustomerDetails->countryCode, " ")
 				    )
 				),
 				"redirectUrl" => array(
-					"success" => (isset($this->RedirectionURL->success)? $this->removeWhitespace($this->RedirectionURL->success) : " "),
-				    "failure" => (isset($this->RedirectionURL->failure)? $this->removeWhitespace($this->RedirectionURL->failure) : " "),
-				    "cancel" => (isset($this->RedirectionURL->cancel)? $this->removeWhitespace($this->RedirectionURL->cancel) : " ")
+					"success" => $this->removeWhitespace($this->isObjExist($this->RedirectionURL->success," ")),
+				    "failure" => $this->removeWhitespace($this->isObjExist($this->RedirectionURL->failure," ")),
+				    "cancel" => $this->removeWhitespace($this->isObjExist($this->RedirectionURL->cancel," "))
 				)
 			);
+		}
+		
+		private function &getCurlInstance(){
+			$curl = new Curl();
+			$curl->setHeader('Content-Type', 'application/json');
+			$curl->setHeader('Authorization', "Basic " . base64_encode($this->sk_key . ":"));
+			return $curl;
+		}
+		
+		private function isObjExist($obj, $replace){
+			return (isset($obj)? $obj : $replace);
 		}
 		
 		private function removeWhitespace($value){
