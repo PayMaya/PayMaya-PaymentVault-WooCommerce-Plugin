@@ -46,6 +46,8 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 		$order = new WC_Order($order_id);
 	  $wcpvd = new WC_PaymentVaultData();
 	  
+	  $pv->debugLogging = ($this->environment == 'yes'? true : false);
+	  
 		if ($order->status == 'pending') {
 			$results = $wcpvd->getRow('order_id', trim($order->id));
 			
@@ -218,37 +220,46 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  $wcpgData = $wcpg->get_post_data();
 		
 		$pv = new \PayMayaPaymentVault\PaymentVault($this->public_facing_api_key, $this->secret_api_key, $this->environment);
+		
+		$pv->debugLogging = ($this->environment == 'yes'? true : false);
+		
+		$pv->paymentFacilitator->smi = "SUB034221";
+	  $pv->paymentFacilitator->smn = "SampleSho";
+	  $pv->paymentFacilitator->mci = "MANILA";
+	  $pv->paymentFacilitator->mpc = "840";
+	  $pv->paymentFacilitator->mco = "PHL";
+		
 		$pv->totalAmount = $wcpg->get_order_total();
 		$pv->currency = $order->order_currency;
 		
-		$pv->RedirectionURL->success = $this->get_return_url($order);
-	  $pv->RedirectionURL->failure = $order->get_checkout_payment_url(false);
-	  $pv->RedirectionURL->cancel = $this->get_return_url($order);
+		$pv->redirectionURL->success = $this->get_return_url($order);
+	  $pv->redirectionURL->failure = $order->get_checkout_payment_url(false);
+	  $pv->redirectionURL->cancel  = $this->get_return_url($order);
 	  
 	  $tokenResp = json_decode(base64_decode($wcpgData['wc-gateway-id']));
 			
 	  $pv->setTokenState((isset($tokenResp->state)? $tokenResp->state : ' '));
 	  
-	  $pv->CustomerDetails->firstName = $wcpgData['billing_first_name'];
-	  $pv->CustomerDetails->middleName = " ";
-	  $pv->CustomerDetails->lastName = $wcpgData['billing_last_name'];
-	  $pv->CustomerDetails->phone = $wcpgData['billing_phone'];
-	  $pv->CustomerDetails->email = $wcpgData['billing_email'];
-	  $pv->CustomerDetails->line1 = $wcpgData['billing_address_1'];
-	  $pv->CustomerDetails->line2 = $wcpgData['billing_address_2'];
-	  $pv->CustomerDetails->city = $wcpgData['billing_city'];
-	  $pv->CustomerDetails->state = $wcpgData['billing_state'];
-	  $pv->CustomerDetails->zipCode = $wcpgData['billing_postcode'];
-	  $pv->CustomerDetails->countryCode = $wcpgData['billing_country'];
+	  $pv->customerDetails->firstName   = $wcpgData['billing_first_name'];
+	  $pv->customerDetails->middleName  = " ";
+	  $pv->customerDetails->lastName    = $wcpgData['billing_last_name'];
+	  $pv->customerDetails->phone       = $wcpgData['billing_phone'];
+	  $pv->customerDetails->email       = $wcpgData['billing_email'];
+	  $pv->customerDetails->line1       = $wcpgData['billing_address_1'];
+	  $pv->customerDetails->line2       = $wcpgData['billing_address_2'];
+	  $pv->customerDetails->city        = $wcpgData['billing_city'];
+	  $pv->customerDetails->state       = $wcpgData['billing_state'];
+	  $pv->customerDetails->zipCode     = $wcpgData['billing_postcode'];
+	  $pv->customerDetails->countryCode = $wcpgData['billing_country'];
 	  
-	  //Delete Line:244-250 once it has a UI for webhook
+	  //Delete Line:255-261 once it has a UI for webhook
 		$webhook = $pv->getListOfWebHooks();
-		if($webhook != false){
+		if($webhook <> false){
 			for($i = 0; $i < count($webhook); $i++){
 		    $pv->updateWebHooks($webhook[$i]->id, $webhook[$i]->name, $this->getWebHookUrl());
 			}
 		}
-			
+	  
 	  $retVal = $pv->createPayment((isset($tokenResp->paymentTokenId)? $tokenResp->paymentTokenId : ' '));
 	  
 	  $wcpvd = new WC_PaymentVaultData();
@@ -257,7 +268,7 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  $wcpvd->token_id = $pv->getTokenID();
 	  $wcpvd->save();
 	  
-	  if($retVal !== false){
+	  if($retVal <> false){
 	    switch ($retVal->status){
 		    case 'PAYMENT_SUCCESS':
 			    $order->payment_complete($pv->getPaymentID());
@@ -290,14 +301,16 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  $pv = new \PayMayaPaymentVault\PaymentVault($this->public_facing_api_key, $this->secret_api_key, $this->environment);
 	  $refund = new WC_Order_Refund($order_id);
 	  
+	  $pv->debugLogging = ($this->environment == 'yes'? true : false);
+	  
 	  if(isset($amount) == true){
-		  $pv->Refunds->paymentID = $refund->get_transaction_id();
-		  $pv->Refunds->reason = $reason;
-		  $pv->Refunds->totalAmount = $amount;
-		  $pv->Refunds->currency = $refund->get_order_currency();
+		  $pv->refunds->paymentID   = $refund->get_transaction_id();
+		  $pv->refunds->reason      = $reason;
+		  $pv->refunds->totalAmount = $amount;
+		  $pv->refunds->currency    = $refund->get_order_currency();
 		  $ret = $pv->createRefunds();
-		  $this->debugLogging(json_encode($ret));
-		  if($ret != false){
+		  
+		  if($ret <> false){
 		  	return ($ret->status == 'SUCCESS'? true : false);
 		  }
 	  }
@@ -314,7 +327,7 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  $postText = file_get_contents('php://input');
 		$postData = json_decode($postText);
 		
-		if($postData != null){
+		if($postData <> null){
 			$wcpvd = new WC_PaymentVaultData();
 		
 			$results = $wcpvd->getRow('payment_id', $postData->id);
@@ -359,7 +372,7 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  
 	  $httpXforwarded = (isset($_SERVER['HTTP_X_FORWARDED_PORT'])? $_SERVER['HTTP_X_FORWARDED_PORT'] : 0);
 			  
-	  $protocol = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] != 'off') || $_SERVER['SERVER_PORT'] == 443 || $httpXforwarded == 443) ? "https://" : "http://";
+	  $protocol = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] <> 'off') || $_SERVER['SERVER_PORT'] == 443 || $httpXforwarded == 443) ? "https://" : "http://";
 	  $url = $protocol . $_SERVER['HTTP_HOST'] . $path;
 	  
 	  return $url;
@@ -373,18 +386,6 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	public function override_frontend_scripts() {
 		wp_deregister_script('wc-checkout');
 		wp_enqueue_script('wc-checkout', plugins_url("js/paymentvault-checkout.js", __FILE__), array('jquery', 'woocommerce', 'wc-country-select', 'wc-address-i18n'), null, true);
-	}
-	
-	private function debugLogging($msg){
-	  $filepath = __DIR__ . "/logging.txt";
-	  $file = fopen($filepath, 'a+');
-	  $h = "8";
-	  $hm = $h * 60;
-	  $ms = $hm * 60;
-	  $txt = "System Log (" . gmdate("m-d-y h:i:sa", time()+($ms)) . ") : " . $msg;
-	  fwrite($file, $txt);
-	  fwrite($file, "\n--------------------------------------------------------------------------------------------------------------------------\n");
-	  fclose($file);
 	}
 	
 	private function debugWebHook(){

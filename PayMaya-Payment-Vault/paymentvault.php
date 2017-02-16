@@ -77,6 +77,28 @@
 		}
 	}
 	
+	class PaymentFacilitatorObject{
+		public $smi;
+		public $smn;
+		public $mci;
+		public $mpc;
+		public $mco;
+		public $mst;
+		
+		function __construct() {
+			
+		}
+		
+		function __destruct() {
+			$this->smi = null;
+			$this->smn = null;
+			$this->mci = null;
+			$this->mpc = null;
+			$this->mco = null;
+			$this->mst = null;
+		}
+	}
+	
 	class CustomersDetailsObject {
 		public $firstName;
 		public $middleName;
@@ -142,28 +164,33 @@
 			'refunds' => '/v1/payments'
 		);
 		
+		public $debugLogging = false;
 		public $totalAmount;
 		public $currency;
-		public $CustomerDetails;
-		public $CardDetails;
-		public $RedirectionURL;
-		public $Refunds;
+		public $customerDetails;
+		public $cardDetails;
+		public $redirectionURL;
+		public $refunds;
+		public $paymentFacilitator;
 		
 		function __construct($publicKey, $secretKey, $env) {
 			$this->pk_key = trim($publicKey);
 			$this->sk_key = trim($secretKey);
 			$this->url = $this->paymayaUrl[($env == "yes"? "sandbox" : "production")];
 			
-			$this->CustomerDetails = new CustomersDetailsObject();
-			$this->CardDetails = new CardDetailsObject();
-			$this->RedirectionURL = new RedirectionURLObject();
-			$this->Refunds = new RefundObject();
+			$this->customerDetails = new CustomersDetailsObject();
+			$this->cardDetails = new CardDetailsObject();
+			$this->redirectionURL = new RedirectionURLObject();
+			$this->refunds = new RefundObject();
+			$this->paymentFacilitator = new PaymentFacilitatorObject();
 		}
 		
 		function __destruct() {
-			$this->CustomerDetails = null;
-			$this->CardDetails = null;
-			$this->RedirectionURL = null;
+			$this->customerDetails = null;
+			$this->cardDetails     = null;
+			$this->redirectionURL  = null;
+			$this->refunds = null;
+			$this->paymentFacilitator = null;
 		}
 		
 		function __get( $name ) {
@@ -202,6 +229,8 @@
 				$this->tokenState = (isset($retval->state)? $retval->state : ' ');
 			}
 			
+			$this->errorLogging('getToken',$ch->response);
+			
 			$ch->close();
 			
 			return $retval;
@@ -232,6 +261,8 @@
 				$this->is3dsEnabled = (isset($retval->verificationUrl) == true? true : false);
 			}
 			
+			$this->errorLogging('createPayment',$ch->response);
+			
 			$ch->close();
 			
 			return $retval;
@@ -259,16 +290,20 @@
 				$retval = $ch->response;
 			}
 			
+			$this->errorLogging('getPayment',$ch->response);
+			
 			$ch->close();
 			
 			return $retval;
 		}
 		
 		public function getPaymentID(){
+			$this->errorLogging('getPaymentID',$this->paymentId);
 			return $this->paymentId;
 		}
 		
 		public function getTokenID(){
+			$this->errorLogging('getTokenID',$this->tokenId);
 			return $this->tokenId;
 		}
 		
@@ -277,6 +312,7 @@
 		}
 		
 		public function getTokenState(){
+			$this->errorLogging('getTokenState',$this->tokenState);
 			return $this->tokenState;
 		}
 		
@@ -287,11 +323,7 @@
 		public function registerWebHook($name, $url){
 			$ch = & $this->getCurlInstance();
 			
-			$data = array(
-				'name' => $name,
-				'callbackUrl' => $url
-			);
-			
+			$data = $this->generateReqWebHooks($name, $url);
 			$ch->post($this->url . $this->urlPath['webhooks'], json_encode($data));
 			
 			if($ch->error){
@@ -300,6 +332,8 @@
 			else{
 				$retval = $ch->response;
 			}
+			
+			$this->errorLogging('registerWebHook', $ch->response);
 			
 			$ch->close();
 			
@@ -317,6 +351,8 @@
 				$retval = $ch->response;
 			}
 			
+			$this->errorLogging('getListOfWebHooks', $ch->response);
+			
 			$ch->close();
 			
 			return $retval;
@@ -325,11 +361,7 @@
 		public function updateWebHooks($webhookID,$name, $url){
 			$ch = & $this->getCurlInstance();
 			
-			$data = array(
-				'name' => $name,
-				'callbackUrl' => $url
-			);
-			
+			$data = $this->generateReqWebHooks($name, $url);
 			$ch->put($this->url . $this->urlPath['webhooks'] . chr(47) . $webhookID, $data);
 			
 			if($ch->error){
@@ -338,6 +370,8 @@
 			else{
 				$retval = $ch->response;
 			}
+			
+			$this->errorLogging('updateWebHooks', $ch->response);
 			
 			$ch->close();
 			
@@ -355,6 +389,8 @@
 				$retval = $ch->response;
 			}
 			
+			$this->errorLogging('getWebHooks', $ch->response);
+			
 			$ch->close();
 			
 			return $retval;
@@ -363,17 +399,8 @@
 		public function createRefunds(){
 			$ch = & $this->getCurlInstance();
 			
-			settype($this->Refunds->totalAmount,'float');
-			
-			$data = array(
-				'reason' => $this->Refunds->reason,
-				'totalAmount' => array(
-					'amount' => $this->Refunds->totalAmount,
-					'currency' => $this->Refunds->currency
-				)
-			);
-			
-			$ch->post($this->url . $this->urlPath['refunds'] . chr(47) . $this->Refunds->paymentID . chr(47) . "refunds", $data);
+			$data = $this->generateReqRefunds();
+			$ch->post($this->url . $this->urlPath['refunds'] . chr(47) . $this->refunds->paymentID . chr(47) . "refunds", $data);
 			
 			if($ch->error){
 				$retval = false;
@@ -389,6 +416,8 @@
 				$retval->paymentID = $this->isObjExist($obj->payment, '');
 			}
 			
+			$this->errorLogging('createRefunds', $ch->response);
+			
 			$ch->close();
 			
 			return $retval;
@@ -396,7 +425,7 @@
 		
 		public function getRefunds(){
 			$ch = & $this->getCurlInstance();
-			$ch->get($this->url . $this->urlPath['refunds'] . chr(47) . $this->Refunds->paymentID . chr(47) . "refunds");
+			$ch->get($this->url . $this->urlPath['refunds'] . chr(47) . $this->refunds->paymentID . chr(47) . "refunds");
 			
 			if($ch->error){
 				$retval = false;
@@ -404,6 +433,8 @@
 			else{
 				$retval = $ch->response;
 			}
+			
+			$this->errorLogging('getRefunds', $ch->response);
 			
 			$ch->close();
 			
@@ -412,7 +443,7 @@
 		
 		public function getRefundInfo(){
 			$ch = & $this->getCurlInstance();
-			$ch->get($this->url . $this->urlPath['refunds'] . chr(47) . $this->Refunds->paymentID . chr(47) . "refunds" . chr(47) . $this->Refunds->refundID);
+			$ch->get($this->url . $this->urlPath['refunds'] . chr(47) . $this->refunds->paymentID . chr(47) . "refunds" . chr(47) . $this->refunds->refundID);
 			
 			if($ch->error){
 				$retval = false;
@@ -421,52 +452,101 @@
 				$retval = $ch->response;
 			}
 			
+			$this->errorLogging('getRefundInfo', $ch->response);
+			
 			$ch->close();
 			
 			return $retval;
 		}
 		
+		private function generateReqRefunds(){
+			$amount = $this->stripCharacters($this->isObjExist($this->refunds->totalAmount, 0), 20);
+			settype($amount,'float');
+			
+			return array(
+				'reason' => $this->stripCharacters($this->isObjExist($this->refunds->reason, 'Refunded'), 255),
+				'totalAmount' => array(
+					'amount' => $amount,
+					'currency' => $this->stripCharacters($this->isObjExist($this->refunds->currency, 'PHP'), 20)
+				)
+			);
+		}
+		
+		private function generateReqWebHooks($name, $url){
+			return array(
+				'name' => $this->stripCharacters($this->isObjExist($name, ' '), 50),
+				'callbackUrl' => $this->stripCharacters($this->isObjExist($url, ' '), 2000)
+			);
+		}
+		
 		private function generateReqCreateToken(){
 			return array(
 				'card' => array(
-					'number' => $this->removeWhitespace($this->isObjExist($this->CardDetails->cardNumber, "")),
-					'expMonth' => $this->removeWhitespace($this->isObjExist($this->CardDetails->cardExpiryMonth, "")),
-					'expYear' => $this->removeWhitespace($this->isObjExist($this->CardDetails->cardExpiryYear, "")),
-					'cvc' => $this->removeWhitespace($this->isObjExist($this->CardDetails->cardCVC, "")),
+					'number' => $this->stripCharacters($this->removeWhitespace($this->isObjExist($this->cardDetails->cardNumber, "0000000000000000")), 16),
+					'expMonth' => $this->stripCharacters($this->removeWhitespace($this->isObjExist($this->cardDetails->cardExpiryMonth, "00")), 2),
+					'expYear' => $this->stripCharacters($this->removeWhitespace($this->isObjExist($this->cardDetails->cardExpiryYear, "0000")), 4),
+					'cvc' => $this->stripCharacters($this->removeWhitespace($this->isObjExist($this->cardDetails->cardCVC, "000")), 4),
 				)
 			);
 		}
 		
 		private function generateReqCreatePayment(){
-			return array(
-				'paymentTokenId' => $this->tokenId,
+			$ret = array(
+				'paymentTokenId' => $this->removeWhitespace($this->isObjExist($this->tokenId, ' ')),
 				'totalAmount' => array(
 					"amount" => $this->isObjExist($this->totalAmount, 0),
-                    "currency" => $this->isObjExist($this->currency, " ")
+                    "currency" =>  $this->stripCharacters($this->isObjExist($this->currency, "PHP"), 3)
 				),
 				'buyer' => array(
-					"firstName" => $this->isObjExist($this->CustomerDetails->firstName, " "),
-				    "middleName" => $this->isObjExist($this->CustomerDetails->middleName, " "),
-				    "lastName" => $this->isObjExist($this->CustomerDetails->lastName, " "),
+					"firstName" => $this->stripCharacters($this->isObjExist($this->customerDetails->firstName, " "), 50),
+				    "middleName" => $this->stripCharacters($this->isObjExist($this->customerDetails->middleName, " "), 50),
+				    "lastName" => $this->stripCharacters($this->isObjExist($this->customerDetails->lastName, " "), 50),
 				    "contact" => array(
-					    "phone" => $this->isObjExist($this->CustomerDetails->phone, " "),
-				        "email" => $this->isObjExist($this->CustomerDetails->email, " ")
+					    "phone" => $this->stripCharacters($this->isObjExist($this->customerDetails->phone, " "), 50),
+				        "email" => $this->stripCharacters($this->isObjExist($this->customerDetails->email, " "), 253)
 				    ),
 				    "billingAddress" => array(
-					    "line1" => $this->isObjExist($this->CustomerDetails->line1, " "),
-				        "line2" => $this->isObjExist($this->CustomerDetails->line2, " "),
-				        "city" => $this->isObjExist($this->CustomerDetails->city, " "),
-				        "state" => $this->isObjExist($this->CustomerDetails->state, " "),
-				        "zipCode" => $this->isObjExist($this->CustomerDetails->zipCode, " "),
-				        "countryCode" => $this->isObjExist($this->CustomerDetails->countryCode, " ")
+					    "line1" => $this->stripCharacters($this->isObjExist($this->customerDetails->line1, " "), 150),
+				        "line2" => $this->stripCharacters($this->isObjExist($this->customerDetails->line2, " "), 150),
+				        "city" => $this->stripCharacters($this->isObjExist($this->customerDetails->city, " "), 50),
+				        "state" => $this->stripCharacters($this->isObjExist($this->customerDetails->state, " "), 50),
+				        "zipCode" => $this->stripCharacters($this->isObjExist($this->customerDetails->zipCode, " "), 20),
+				        "countryCode" => $this->stripCharacters($this->isObjExist($this->customerDetails->countryCode, "PH"), 2)
 				    )
 				),
 				"redirectUrl" => array(
-					"success" => $this->removeWhitespace($this->isObjExist($this->RedirectionURL->success," ")),
-				    "failure" => $this->removeWhitespace($this->isObjExist($this->RedirectionURL->failure," ")),
-				    "cancel" => $this->removeWhitespace($this->isObjExist($this->RedirectionURL->cancel," "))
+					"success" => $this->removeWhitespace($this->isObjExist($this->redirectionURL->success," ")),
+				    "failure" => $this->removeWhitespace($this->isObjExist($this->redirectionURL->failure," ")),
+				    "cancel" => $this->removeWhitespace($this->isObjExist($this->redirectionURL->cancel," "))
+				),
+				"metadata" =>  array(
+					"pf" =>  array(
+						"smi" => $this->stripCharacters($this->isObjExist($this->paymentFacilitator->smi, ' '), 15),
+						"smn" => $this->stripCharacters($this->isObjExist($this->paymentFacilitator->smn, ' '), 9),
+						"mci" => $this->stripCharacters($this->isObjExist($this->paymentFacilitator->mci, ' '), 13),
+						"mpc" => $this->stripCharacters($this->isObjExist($this->paymentFacilitator->mpc, ' '), 3),
+						"mco" => $this->stripCharacters($this->isObjExist($this->paymentFacilitator->mco, ' '), 3)
+					)
 				)
 			);
+			
+			if(isset($this->paymentFacilitator->mpc) == true || strlen($this->paymentFacilitator->mpc) > 0){
+				if($this->paymentFacilitator->mpc == 840){
+					$ret['metadata']['pf']['mst'] = $this->stripCharacters($this->isObjExist($this->paymentFacilitator->mst, ' '), 3);
+				}
+			}
+			
+			if(isset($this->customerDetails->middleName) == false || strlen($this->customerDetails->middleName) == 0){
+				unset($ret['buyer']['middleName']);
+			}
+			
+			if(isset($this->customerDetails->line2) == false || strlen($this->customerDetails->line2) == 0){
+				unset($ret['buyer']['billingAddress']['line2']);
+			}
+			
+			$this->errorLogging('generateReqCreatePayment', $ret);
+			
+			return $ret;
 		}
 		
 		private function &getCurlInstance(){
@@ -484,4 +564,48 @@
 			return str_replace(' ', '', trim($value));
 		}
 		
+		private function stripCharacters($value, $length){
+			if(gettype($value) <> 'string'){
+				return false;
+			}
+			
+			if(strlen($value) == 0){
+				return false;
+			}
+			
+			return substr($value, 0, $length);
+		}
+		
+		public function errorLogging($method, $msg){
+			if($this->debugLogging == false){
+				return false;
+			}
+			
+			if(gettype($msg) == 'object' || gettype($msg) == 'array'){
+				$msg = json_encode($msg);
+			}
+			elseif (gettype($msg) == 'boolean'){
+				settype($msg, 'string');
+			}
+			
+			$filepath = __DIR__ . "/paymentvault_error.txt";
+			
+			$fileSize = filesize($filepath);
+			
+			if(($fileSize / 1024) >= 14648){
+				//delete all contents
+				$file = fopen($filepath, 'w');
+				fwrite($file, "");
+				fclose($file);
+			}
+			
+			$file = fopen($filepath, 'a+');
+			$h = "8";
+			$hm = $h * 60;
+			$ms = $hm * 60;
+			$txt = strtoupper($method) . " (" . gmdate("m-d-y h:i:sa", time()+($ms)) . "): " . $msg;
+			fwrite($file, $txt);
+			fwrite($file, "\n--------------------------------------------------------------------------------------------------------------------------\n");
+			fclose($file);
+		}
 	}
