@@ -46,7 +46,7 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 		$order = new WC_Order($order_id);
 	  $wcpvd = new WC_PaymentVaultData();
 	  
-	  $pv->debugLogging = ($this->environment == 'yes'? true : false);
+	  $pv->debugLogging = ($this->debug_log == 'yes'? true : false);
 	  
 		if ($order->status == 'pending') {
 			$results = $wcpvd->getRow('order_id', trim($order->id));
@@ -100,6 +100,11 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
         'default'  => __( 'Pay securely using your VISA and MasterCard credit, debit, or prepaid card.', 'paymaya-paymentvault' ),
         'css'      => 'max-width:350px;'
       ),
+      'api_keys' => array(
+	      'title'       => __( 'API credentials', 'paymaya-paymentvault' ),
+	      'type'        => 'title',
+	      'description' => 'Enter your PayMaya Payment Vault API credentials',
+      ),
       'public_facing_api_key' => array(
         'title'    => __( 'Public-facing API Key', 'paymaya-paymentvault' ),
         'type'     => 'text',
@@ -109,6 +114,48 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
         'title'    => __( 'Secret API Key', 'paymaya-paymentvault' ),
         'type'     => 'text',
         'desc_tip' => __( 'Used to authenticate yourself to PayMaya Payment Vault.', 'paymaya-paymentvault' ),
+      ),
+      'payment_facilitator' => array(
+	      'title'       => __( 'Payment Facilitator', 'paymaya-paymentvault' ),
+	      'type'        => 'title',
+	      'description' => 'Payment Vault supports payment facilitators.',
+      ),
+      'pf_smi' => array(
+	      'title'    => __( 'Sub Merchant ID (SMI)', 'paymaya-paymentvault' ),
+	      'type'     => 'text',
+	      'desc_tip' => __( 'Sub Merchant ID assigned by the payment facilitator or their acquirer', 'paymaya-paymentvault' ),
+      ),
+      'pf_smn' => array(
+	      'title'    => __( 'Sub Merchant Name (SMN)', 'paymaya-paymentvault' ),
+	      'type'     => 'text',
+	      'desc_tip' => __( 'Name of sub-merchant', 'paymaya-paymentvault' ),
+      ),
+      'pf_mci' => array(
+	      'title'    => __( 'Sub Merchant City (MCI)', 'paymaya-paymentvault' ),
+	      'type'     => 'text',
+	      'desc_tip' => __( 'Sub-merchant City', 'paymaya-paymentvault' ),
+      ),
+      'pf_mpc' => array(
+	      'title'    => __( 'Sub Merchant Country Code Numeric (MPC)', 'paymaya-paymentvault' ),
+	      'type'     => 'text',
+	      'desc_tip' => __( '3-digit numeric country code of the sub-merchant', 'paymaya-paymentvault' ),
+      ),
+      'pf_mco' => array(
+	      'title'    => __( 'Sub Merchant Country Code Character (MCO)', 'paymaya-paymentvault' ),
+	      'type'     => 'text',
+	      'desc_tip' => __( 'Alphabetic 3-character country code of the sub-merchant', 'paymaya-paymentvault' ),
+      ),
+      'pf_mst' => array(
+	      'title'    => __( 'Sub Merchant State (MST)', 'paymaya-paymentvault' ),
+	      'type'     => 'text',
+	      'desc_tip' => __( 'Sub-merchant state', 'paymaya-paymentvault' ),
+      ),
+      'debug_log'           => array(
+	      'title'       => __( 'Debug logging', 'paymaya-paymentvault' ),
+	      'label'       => __( 'Enable logging', 'paymaya-paymentvault' ),
+	      'type'        => 'checkbox',
+	      'description' => __( 'Log PayMaya Payment Vault events, such as create payment, refunds, webhooks, inside<br/>' . __FILE__ . '/PayMaya-Payment-Vault/paymentvault_error.log', 'paymaya-paymentvault' ),
+	      'default'     => 'no',
       ),
       'environment'           => array(
         'title'       => __( 'Sandbox Mode', 'paymaya-paymentvault' ),
@@ -210,10 +257,6 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	}
 	
 	public function process_payment( $order_id ) {
-		global $woocommerce;
-		
-		$returnURL = "";
-		
 		$order = new WC_Order($order_id);
 			
 		$wcpg = new WC_Payment_Gateway_CC();
@@ -221,13 +264,14 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 		
 		$pv = new \PayMayaPaymentVault\PaymentVault($this->public_facing_api_key, $this->secret_api_key, $this->environment);
 		
-		$pv->debugLogging = ($this->environment == 'yes'? true : false);
+		$pv->debugLogging = ($this->debug_log == 'yes'? true : false);
 		
-		$pv->paymentFacilitator->smi = "SUB034221";
-	  $pv->paymentFacilitator->smn = "SampleSho";
-	  $pv->paymentFacilitator->mci = "MANILA";
-	  $pv->paymentFacilitator->mpc = "840";
-	  $pv->paymentFacilitator->mco = "PHL";
+		$pv->paymentFacilitator->smi = $this->pf_smi;
+	  $pv->paymentFacilitator->smn = $this->pf_smn;
+	  $pv->paymentFacilitator->mci = $this->pf_mci;
+	  $pv->paymentFacilitator->mpc = $this->pf_mpc;
+	  $pv->paymentFacilitator->mco = $this->pf_mco;
+	  $pv->paymentFacilitator->mst = $this->pf_mst;
 		
 		$pv->totalAmount = $wcpg->get_order_total();
 		$pv->currency = $order->order_currency;
@@ -252,7 +296,7 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  $pv->customerDetails->zipCode     = $wcpgData['billing_postcode'];
 	  $pv->customerDetails->countryCode = $wcpgData['billing_country'];
 	  
-	  //Delete Line:255-261 once it has a UI for webhook
+	  //Delete Line:299-305 once it has a UI for webhook
 		$webhook = $pv->getListOfWebHooks();
 		if($webhook <> false){
 			for($i = 0; $i < count($webhook); $i++){
@@ -301,7 +345,7 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  $pv = new \PayMayaPaymentVault\PaymentVault($this->public_facing_api_key, $this->secret_api_key, $this->environment);
 	  $refund = new WC_Order_Refund($order_id);
 	  
-	  $pv->debugLogging = ($this->environment == 'yes'? true : false);
+	  $pv->debugLogging = ($this->debug_log == 'yes'? true : false);
 	  
 	  if(isset($amount) == true){
 		  $pv->refunds->paymentID   = $refund->get_transaction_id();
@@ -320,12 +364,13 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 		
 	public function paymaya_paymentvault_webhook_handler(){
 			
-	  if($this->environment == 'yes'){
-	  	$this->debugWebHook();
-	  }
+	  $pv = new \PayMayaPaymentVault\PaymentVault($this->public_facing_api_key, $this->secret_api_key, $this->environment);
+	  $pv->debugLogging = ($this->debug_log == 'yes'? true : false);
 			
 	  $postText = file_get_contents('php://input');
 		$postData = json_decode($postText);
+		
+		$pv->errorLogging('webhook callback handler', $postData);
 		
 		if($postData <> null){
 			$wcpvd = new WC_PaymentVaultData();
@@ -386,32 +431,5 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	public function override_frontend_scripts() {
 		wp_deregister_script('wc-checkout');
 		wp_enqueue_script('wc-checkout', plugins_url("js/paymentvault-checkout.js", __FILE__), array('jquery', 'woocommerce', 'wc-country-select', 'wc-address-i18n'), null, true);
-	}
-	
-	private function debugWebHook(){
-	  $filepath = __DIR__ . "/webhook_dump.txt";
-	  
-	  $fileSize = filesize($filepath);
-	  
-	  if(($fileSize / 1024) >= 14648){
-	  	//delete all contents
-		  $file = fopen($filepath, 'w');
-	    fwrite($file, "");
-		  fclose($file);
-	  }
-			
-	  $myfile = fopen($filepath, "a+");
-	  fwrite($myfile, "--------------------------------------------------------------------------------------------------------------------------". "\n");
-	  $h = "8";
-	  $hm = $h * 60;
-	  $ms = $hm * 60;
-	  $txt = "TIME:" . gmdate("m-d-y h:i:sa", time()+($ms)) . "\n";
-	  fwrite($myfile, $txt);
-	  $gettxt = $_GET;
-	  fwrite($myfile, "GET DATA: " . json_encode($gettxt) . "\n");
-	  $posttxt = json_decode(file_get_contents('php://input'), true);
-	  fwrite($myfile, "POST DATA: " . json_encode($posttxt) . "\n");
-	  fwrite($myfile, "--------------------------------------------------------------------------------------------------------------------------". "\n");
-	  fclose($myfile);
 	}
 }

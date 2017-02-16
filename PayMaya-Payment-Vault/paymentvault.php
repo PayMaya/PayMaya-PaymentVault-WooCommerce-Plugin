@@ -588,7 +588,7 @@
 				settype($msg, 'string');
 			}
 			
-			$filepath = __DIR__ . "/paymentvault_error.txt";
+			$filepath = __DIR__ . "/paymentvault_error.log";
 			
 			$fileSize = filesize($filepath);
 			
