@@ -19,10 +19,11 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 
     $this->has_fields = true;
     $this->supports = array(
+      'tokenization',
 	    'products',
 	    'refunds'
     );
-
+    
     $this->init_form_fields();
     $this->init_settings();
 
@@ -106,7 +107,7 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	      'description' => 'Enter your PayMaya Payment Vault API credentials',
       ),
       'public_facing_api_key' => array(
-        'title'    => __( 'Public-facing API Key', 'paymaya-paymentvault' ),
+        'title'    => __( 'Public API Key', 'paymaya-paymentvault' ),
         'type'     => 'text',
         'desc_tip' => __( 'Used to authenticate yourself to Payment Vault.', 'paymaya-paymentvault' ),
       ),
@@ -154,7 +155,7 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	      'title'       => __( 'Debug logging', 'paymaya-paymentvault' ),
 	      'label'       => __( 'Enable logging', 'paymaya-paymentvault' ),
 	      'type'        => 'checkbox',
-	      'description' => __( 'Log PayMaya Payment Vault events, such as create payment, refunds, webhooks, inside<br/>' . __FILE__ . '/PayMaya-Payment-Vault/paymentvault_error.log', 'paymaya-paymentvault' ),
+	      'description' => __( 'Log PayMaya Payment Vault events, such as create payment, refunds, webhooks, inside<br/> <a href="'. plugin_dir_url(__FILE__) . 'PayMaya-Payment-Vault/paymentvault_error.log' .'" target="_blank">' . __DIR__ . '/PayMaya-Payment-Vault/paymentvault_error.log</a>', 'paymaya-paymentvault' ),
 	      'default'     => 'no',
       ),
       'environment'           => array(
@@ -184,12 +185,20 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	public function payment_fields() {
 		if ( $this->supports( 'tokenization' ) && is_checkout() ) {
 			$this->tokenization_script();
-			$this->saved_payment_methods();
+			//$this->saved_payment_methods();
 			$this->form();
-			$this->save_payment_method_checkbox();
+			//$this->save_payment_method_checkbox();
 		} else {
 			$this->form();
 		}
+	}
+	
+	/**
+	 * Enqueues our tokenization script to handle some of the new form options.
+	 * @since 2.6.0
+	 */
+	public function tokenization_script() {
+	  wp_enqueue_script('paymentvaultjs');
 	}
 	
 	/**
@@ -208,7 +217,6 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	public function form() {
 	  wp_enqueue_script('paymaya');
 		wp_enqueue_script( 'wc-credit-card-form' );
-	  wp_enqueue_script('paymentvaultjs');
 		
 		$fields = array();
 			
@@ -284,19 +292,19 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 			
 	  $pv->setTokenState((isset($tokenResp->state)? $tokenResp->state : ' '));
 	  
-	  $pv->customerDetails->firstName   = $wcpgData['billing_first_name'];
+	  $pv->customerDetails->firstName   = $order->billing_first_name;
 	  $pv->customerDetails->middleName  = " ";
-	  $pv->customerDetails->lastName    = $wcpgData['billing_last_name'];
-	  $pv->customerDetails->phone       = $wcpgData['billing_phone'];
-	  $pv->customerDetails->email       = $wcpgData['billing_email'];
-	  $pv->customerDetails->line1       = $wcpgData['billing_address_1'];
-	  $pv->customerDetails->line2       = $wcpgData['billing_address_2'];
-	  $pv->customerDetails->city        = $wcpgData['billing_city'];
-	  $pv->customerDetails->state       = $wcpgData['billing_state'];
-	  $pv->customerDetails->zipCode     = $wcpgData['billing_postcode'];
-	  $pv->customerDetails->countryCode = $wcpgData['billing_country'];
+	  $pv->customerDetails->lastName    = $order->billing_last_name;
+	  $pv->customerDetails->phone       = $order->billing_phone;
+	  $pv->customerDetails->email       = $order->billing_email;
+	  $pv->customerDetails->line1       = $order->billing_address_1;
+	  $pv->customerDetails->line2       = $order->billing_address_2;
+	  $pv->customerDetails->city        = $order->billing_city;
+	  $pv->customerDetails->state       = $order->billing_state;
+	  $pv->customerDetails->zipCode     = $order->billing_postcode;
+	  $pv->customerDetails->countryCode = $order->billing_country;
 	  
-	  //Delete Line:299-305 once it has a UI for webhook
+	  //Delete Line:307-313 once it has a UI for webhook
 		$webhook = $pv->getListOfWebHooks();
 		if($webhook <> false){
 			for($i = 0; $i < count($webhook); $i++){
@@ -306,13 +314,14 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  
 	  $retVal = $pv->createPayment((isset($tokenResp->paymentTokenId)? $tokenResp->paymentTokenId : ' '));
 	  
-	  $wcpvd = new WC_PaymentVaultData();
-	  $wcpvd->order_id = $order_id;
-	  $wcpvd->payment_id = $pv->getPaymentID();
-	  $wcpvd->token_id = $pv->getTokenID();
-	  $wcpvd->save();
-	  
 	  if($retVal <> false){
+	  
+	    $wcpvd = new WC_PaymentVaultData();
+	    $wcpvd->order_id = $order_id;
+	    $wcpvd->payment_id = $pv->getPaymentID();
+	    $wcpvd->token_id = $pv->getTokenID();
+	    $wcpvd->save();
+	  	
 	    switch ($retVal->status){
 		    case 'PAYMENT_SUCCESS':
 			    $order->payment_complete($pv->getPaymentID());
@@ -323,7 +332,7 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 				    return array('result' => 'success', 'redirect' => urldecode($retVal->verificationUrl));
 			    }
 			    else{
-				    $order->update_status('on-hold', __('Awaiting cheque payment', 'woothemes'));
+				    $order->update_status('on-hold', __('Awaiting credit card payment', 'woothemes'));
 			    }
 			    break;
 		    case 'PAYMENT_FAILED':
@@ -360,6 +369,45 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  }
 	  
 		return false;
+	}
+	
+	public function process_admin_options(){
+	  $this->init_settings();
+	  
+	  $post_data = $this->get_post_data();
+	  
+	  foreach ( $this->get_form_fields() as $key => $field ) {
+	  	$ftype = $this->get_field_type($field);
+	  	$fv = $this->get_field_value($key, $field, $post_data );
+		  
+	    if($key == 'public_facing_api_key' || $key == 'secret_api_key'){
+		  	if(strlen($fv) == 0){
+		      $this->add_error("<b>Public API key and Secret API key is required</b>");
+			  }
+			  else{
+		  		//Code for Webhook registration
+			  }
+	    }
+	    
+	    if($key == 'debug_log' && $fv == 'no'){
+	      $filepath = __DIR__ . "/PayMaya-Payment-Vault/paymentvault_error.log";
+	      $file = fopen($filepath, 'w');
+	      fwrite($file, "");
+	      fclose($file);
+	    }
+	  
+	    if ('title' !== $ftype) {
+		    try {
+			    $this->settings[ $key ] = $fv;
+		    } catch ( Exception $e ) {
+			    $this->add_error( $e->getMessage() );
+		    }
+	    }
+	  }
+	  
+	  $this->display_errors();
+	  
+	  return update_option( $this->get_option_key(), apply_filters( 'woocommerce_settings_api_sanitized_fields_' . $this->id, $this->settings ) );
 	}
 		
 	public function paymaya_paymentvault_webhook_handler(){

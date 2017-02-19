@@ -603,7 +603,7 @@
 			$h = "8";
 			$hm = $h * 60;
 			$ms = $hm * 60;
-			$txt = strtoupper($method) . " (" . gmdate("m-d-y h:i:sa", time()+($ms)) . "): " . $msg;
+			$txt = "[" . gmdate("m-d-y h:i:sa", time()+($ms)) . "](". strtoupper($method) .") : " . $msg;
 			fwrite($file, $txt);
 			fwrite($file, "\n--------------------------------------------------------------------------------------------------------------------------\n");
 			fclose($file);

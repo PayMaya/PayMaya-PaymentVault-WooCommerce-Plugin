@@ -66,10 +66,8 @@ function paymaya_paymentvault_data_activate() {
 			`payment_id` varchar(255) NOT NULL DEFAULT \'\',
 			`token_id` varchar(255) NOT NULL,
 			`order_id` integer NOT NULL,
+			`date_created` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY (`id`)
 		  ) ENGINE = MYISAM;
 	');
 }
-
-
-

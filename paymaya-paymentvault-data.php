@@ -26,10 +26,10 @@
 			
 			$dbname = $wpdb->prefix . 'woocommerce_paymentvault_data';
 			
-			$query = $wpdb->prepare("SELECT * FROM $dbname WHERE $col = '%s'", $value );
+			$query = $wpdb->prepare("SELECT * FROM $dbname WHERE $col = '%s' ORDER BY id DESC", $value );
 			$results = $wpdb->get_row($query);
 			
-			if($wpdb->num_rows == 1){
+			if($wpdb->num_rows >= 1){
 				$this->payment_id = $results->payment_id;
 				$this->token_id = $results->token_id;
 				$this->order_id = $results->order_id;
