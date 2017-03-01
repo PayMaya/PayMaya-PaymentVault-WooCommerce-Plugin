@@ -353,19 +353,29 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	public function process_refund( $order_id, $amount = null, $reason = '') {
 	  $pv = new \PayMayaPaymentVault\PaymentVault($this->public_facing_api_key, $this->secret_api_key, $this->environment);
 	  $refund = new WC_Order_Refund($order_id);
+	  $wcpvd = new WC_PaymentVaultData();
 	  
 	  $pv->debugLogging = ($this->debug_log == 'yes'? true : false);
+			
+	  if($wcpvd->getRow('order_id', $order_id)){
+	  	
+	    $payInfo = $pv->getPayment($wcpvd->payment_id);
+	    
+	    if($payInfo <> false){
+	    	
+	    }
 	  
-	  if(isset($amount) == true){
-		  $pv->refunds->paymentID   = $refund->get_transaction_id();
-		  $pv->refunds->reason      = $reason;
-		  $pv->refunds->totalAmount = $amount;
-		  $pv->refunds->currency    = $refund->get_order_currency();
-		  $ret = $pv->createRefunds();
+	    if(isset($amount) == true){
+		    $pv->refunds->paymentID   = $wcpvd->payment_id;
+		    $pv->refunds->reason      = $reason;
+		    $pv->refunds->totalAmount = $amount;
+		    $pv->refunds->currency    = $refund->get_order_currency();
+		    $ret = $pv->createRefunds();
 		  
-		  if($ret <> false){
-		  	return ($ret->status == 'SUCCESS'? true : false);
-		  }
+		    if($ret <> false){
+			    return ($ret->status == 'SUCCESS'? true : false);
+		    }
+	    }
 	  }
 	  
 		return false;
@@ -390,10 +400,15 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	    }
 	    
 	    if($key == 'debug_log' && $fv == 'no'){
-	      $filepath = __DIR__ . "/PayMaya-Payment-Vault/paymentvault_error.log";
-	      $file = fopen($filepath, 'w');
-	      fwrite($file, "");
-	      fclose($file);
+	    	try{
+			    $filepath = __DIR__ . "/PayMaya-Payment-Vault/paymentvault_error.log";
+			    $file = fopen($filepath, 'w');
+			    fwrite($file, "");
+			    fclose($file);
+		    }
+	    	catch (Exception $e){
+		      $this->add_error( $e->getMessage() );
+		    }
 	    }
 	  
 	    if ('title' !== $ftype) {
@@ -466,7 +481,8 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  $httpXforwarded = (isset($_SERVER['HTTP_X_FORWARDED_PORT'])? $_SERVER['HTTP_X_FORWARDED_PORT'] : 0);
 			  
 	  $protocol = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] <> 'off') || $_SERVER['SERVER_PORT'] == 443 || $httpXforwarded == 443) ? "https://" : "http://";
-	  $url = $protocol . $_SERVER['HTTP_HOST'] . $path;
+	  $host = (isset($_SERVER['HTTP_HOST']) == true ? $_SERVER['HTTP_HOST'] : " ");
+	  $url = $protocol . $host . $path;
 	  
 	  return $url;
 	}
@@ -479,5 +495,9 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	public function override_frontend_scripts() {
 		wp_deregister_script('wc-checkout');
 		wp_enqueue_script('wc-checkout', plugins_url("js/paymentvault-checkout.js", __FILE__), array('jquery', 'woocommerce', 'wc-country-select', 'wc-address-i18n'), null, true);
+	}
+	
+	private function isRefundValid(){
+		
 	}
 }

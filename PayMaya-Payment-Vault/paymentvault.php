@@ -161,7 +161,8 @@
 			'createToken' => '/v1/payment-tokens',
 			'payments' => '/v1/payments',
 			'webhooks' => '/v1/webhooks',
-			'refunds' => '/v1/payments'
+			'refunds' => '/v1/payments',
+			'void' => '/v1/payments'
 		);
 		
 		public $debugLogging = false;
@@ -270,7 +271,6 @@
 		
 		public function getPayment(){
 			$numargs = func_num_args();
-			$paymentId = '';
 			
 			if($numargs > 0){
 				$this->paymentId = func_get_arg(0);
@@ -390,6 +390,27 @@
 			}
 			
 			$this->errorLogging('getWebHooks', $ch->response);
+			
+			$ch->close();
+			
+			return $retval;
+		}
+		
+		public function voidPayments($paymentID, $reason){
+			$ch = & $this->getCurlInstance();
+			
+			$data = array('reason' => $this->isObjExist($reason, ' '));
+			
+			$ch->delete($this->url . $this->urlPath['void'] . chr(47) . $paymentID, $data);
+			
+			if($ch->error){
+				$retval = false;
+			}
+			else{
+				$retval = $ch->response;
+			}
+			
+			$this->errorLogging('voidPayment', $ch->response);
 			
 			$ch->close();
 			
@@ -595,7 +616,13 @@
 			if(($fileSize / 1024) >= 14648){
 				//delete all contents
 				$file = fopen($filepath, 'w');
-				fwrite($file, "");
+				
+				try{
+					fwrite($file, "");
+				}catch (Exception $e){
+					
+				}
+				
 				fclose($file);
 			}
 			
@@ -604,8 +631,15 @@
 			$hm = $h * 60;
 			$ms = $hm * 60;
 			$txt = "[" . gmdate("m-d-y h:i:sa", time()+($ms)) . "](". strtoupper($method) .") : " . $msg;
-			fwrite($file, $txt);
-			fwrite($file, "\n--------------------------------------------------------------------------------------------------------------------------\n");
+			
+			try{
+				fwrite($file, $txt);
+				fwrite($file, "\n--------------------------------------------------------------------------------------------------------------------------\n");
+			}
+			catch (Exception $e){
+				fclose($file);
+			}
+			
 			fclose($file);
 		}
 	}

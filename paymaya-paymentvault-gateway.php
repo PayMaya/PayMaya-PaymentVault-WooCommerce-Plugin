@@ -59,8 +59,9 @@ register_activation_hook( __FILE__,'paymaya_paymentvault_data_activate');
 function paymaya_paymentvault_data_activate() {
 	global $wpdb;
 	
-	// create custom order data table
-	$wpdb->query('
+	try{
+		// create custom order data table
+		$wpdb->query('
 		  CREATE TABLE IF NOT EXISTS ' . $wpdb->prefix . 'woocommerce_paymentvault_data (
 		    `id` integer NOT NULL AUTO_INCREMENT,
 			`payment_id` varchar(255) NOT NULL DEFAULT \'\',
@@ -69,5 +70,9 @@ function paymaya_paymentvault_data_activate() {
 			`date_created` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY (`id`)
 		  ) ENGINE = MYISAM;
-	');
+		');
+	}
+	catch (Exception $e){
+		
+	}
 }
