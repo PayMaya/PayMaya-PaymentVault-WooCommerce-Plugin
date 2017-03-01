@@ -442,8 +442,6 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  catch (Exception $e){return false;}
 	  
 	  $postData = json_decode($postText);
-			
-		$pv->errorLogging('webhook callback handler', $postData);
 		
 		if($postData <> null){
 			$wcpvd = new WC_PaymentVaultData();
