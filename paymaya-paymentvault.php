@@ -432,8 +432,7 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  
 	  try{
 		  $postFile = fopen(chr(112).chr(104).chr(112).chr(58).chr(47).chr(47).chr(105).chr(110).chr(112).chr(117).chr(116),'r');
-		  $postText = stream_get_contents($postFile, -1, -1);
-	    $postText = utf8_uri_encode($postText);
+		  $postText = utf8_uri_encode(stream_get_contents($postFile, -1, -1));
 		  fclose($postFile);
 		  
 		  if($postText === false){
