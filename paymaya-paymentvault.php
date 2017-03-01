@@ -431,13 +431,15 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  $pv->debugLogging = ($this->debug_log == 'yes'? true : false);
 	  
 	  try{
-	    $postText = file_get_contents(chr(112).chr(104).chr(112).chr(58).chr(47).chr(47).chr(105).chr(110).chr(112).chr(117).chr(116));
-	    
-	    if($postText === false){
-		    return false;
-	    }
+		  $postFile = fopen(chr(112).chr(104).chr(112).chr(58).chr(47).chr(47).chr(105).chr(110).chr(112).chr(117).chr(116),'r');
+		  $postText = stream_get_contents($postFile, -1, -1);
+		  fclose($postFile);
+		  
+		  if($postText === false){
+			  return false;
+		  }
 	  }
-	  catch (Exception $e){}
+	  catch (Exception $e){return false;}
 	  
 	  $postData = json_decode($postText);
 			
