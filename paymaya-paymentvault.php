@@ -429,10 +429,18 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 			
 	  $pv = new \PayMayaPaymentVault\PaymentVault($this->public_facing_api_key, $this->secret_api_key, $this->environment);
 	  $pv->debugLogging = ($this->debug_log == 'yes'? true : false);
+	  
+	  try{
+	    $postText = file_get_contents(chr(112).chr(104).chr(112).chr(58).chr(47).chr(47).chr(105).chr(110).chr(112).chr(117).chr(116));
+	    
+	    if($postText === false){
+		    return false;
+	    }
+	  }
+	  catch (Exception $e){}
+	  
+	  $postData = json_decode($postText);
 			
-	  $postText = file_get_contents('php://input');
-		$postData = json_decode($postText);
-		
 		$pv->errorLogging('webhook callback handler', $postData);
 		
 		if($postData <> null){
@@ -477,12 +485,8 @@ class Paymaya_Paymentvault extends WC_Payment_Gateway {
 	  else{
 	    $path = '/?wc-api=paymaya_paymentvault';
 	  }
-	  
-	  $httpXforwarded = (isset($_SERVER['HTTP_X_FORWARDED_PORT'])? $_SERVER['HTTP_X_FORWARDED_PORT'] : 0);
-			  
-	  $protocol = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] <> 'off') || $_SERVER['SERVER_PORT'] == 443 || $httpXforwarded == 443) ? "https://" : "http://";
-	  $host = (isset($_SERVER['HTTP_HOST']) == true ? $_SERVER['HTTP_HOST'] : " ");
-	  $url = $protocol . $host . $path;
+			
+	  $url = get_site_url() . $path;
 	  
 	  return $url;
 	}
